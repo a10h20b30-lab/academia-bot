@@ -1,0 +1,38 @@
+[
+  {
+    "candidateId": 6021652936,
+    "employerId": 6461705499,
+    "candidateName": "מוטי קבסה",
+    "employerName": "לשכה",
+    "matchedAt": "2026-05-25T19:29:52.807Z",
+    "status": "active",
+    "followUpSent": false
+  },
+  {
+    "candidateId": 6461705499,
+    "employerId": 6021652936,
+    "candidateName": "חלי כהן",
+    "employerName": "לשכה",
+    "matchedAt": "2026-05-25T19:33:16.803Z",
+    "status": "active",
+    "followUpSent": false
+  },
+  {
+    "candidateId": 5748442936,
+    "employerId": 6021652936,
+    "candidateName": "אברהם בנאי",
+    "employerName": "לשכה",
+    "matchedAt": "2026-05-26T07:14:47.569Z",
+    "status": "active",
+    "followUpSent": false
+  },
+  {
+    "candidateId": 6021652936,
+    "employerId": 6021652936,
+    "candidateName": "מוטי קבסה",
+    "employerName": "לשכה",
+    "matchedAt": "2026-06-05T15:52:03.613Z",
+    "status": "active",
+    "followUpSent": false
+  }
+]
