@@ -12,12 +12,15 @@ const bot = new TelegramBot(process.env.TELEGRAM_TOKEN, { polling: true });
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 const ADMIN_ID = 6021652936;
+const ADMIN_PHONE_LINK = "https://wa.me/972548028082"; // לינק ישיר לוואטסאפ של האדמין
+const EMPLOYER_ACCESS_CODE = "kozo8"; // קוד האישור הקבוע ללשכות/עיריות
 const DATA_DIR = path.join(__dirname, "../data");
 const CANDIDATES_FILE      = path.join(DATA_DIR, "candidates.json");
 const EMPLOYERS_FILE       = path.join(DATA_DIR, "employers.json");
 const APPROVED_FILE        = path.join(DATA_DIR, "approved_phones.json");
 const PENDING_MATCHES_FILE = path.join(DATA_DIR, "pending_matches.json");
 const PAUSED_FILE          = path.join(DATA_DIR, "paused_candidates.json");
+const PAUSED_EMPLOYERS_FILE = path.join(DATA_DIR, "paused_employers.json");
 const MATCHES_HISTORY_FILE   = path.join(DATA_DIR, "matches_history.json");
 const RECOMMENDATIONS_FILE   = path.join(DATA_DIR, "recommendations.json");
 const ARCHIVE_FILE           = path.join(DATA_DIR, "archive.json");
@@ -32,6 +35,7 @@ function ensureDataFiles() {
   if (!fs.existsSync(APPROVED_FILE))        fs.writeFileSync(APPROVED_FILE,        "[]");
   if (!fs.existsSync(PENDING_MATCHES_FILE)) fs.writeFileSync(PENDING_MATCHES_FILE, "[]");
   if (!fs.existsSync(PAUSED_FILE))          fs.writeFileSync(PAUSED_FILE,          "[]");
+  if (!fs.existsSync(PAUSED_EMPLOYERS_FILE)) fs.writeFileSync(PAUSED_EMPLOYERS_FILE, "[]");
   if (!fs.existsSync(MATCHES_HISTORY_FILE))   fs.writeFileSync(MATCHES_HISTORY_FILE,   "[]");
   if (!fs.existsSync(RECOMMENDATIONS_FILE))  fs.writeFileSync(RECOMMENDATIONS_FILE,  "[]");
   if (!fs.existsSync(ARCHIVE_FILE))          fs.writeFileSync(ARCHIVE_FILE,          "[]");
@@ -94,6 +98,20 @@ function pauseCandidate(telegramId) {
 
 function resumeCandidate(telegramId) {
   writeJSON(PAUSED_FILE, readJSON(PAUSED_FILE).filter((p) => p.telegram_id !== telegramId));
+}
+
+function isEmployerPaused(telegramId) {
+  return readJSON(PAUSED_EMPLOYERS_FILE).some((p) => p.telegram_id === telegramId);
+}
+
+function pauseEmployer(telegramId) {
+  const list = readJSON(PAUSED_EMPLOYERS_FILE).filter((p) => p.telegram_id !== telegramId);
+  list.push({ telegram_id: telegramId, paused_at: new Date().toISOString() });
+  writeJSON(PAUSED_EMPLOYERS_FILE, list);
+}
+
+function resumeEmployer(telegramId) {
+  writeJSON(PAUSED_EMPLOYERS_FILE, readJSON(PAUSED_EMPLOYERS_FILE).filter((p) => p.telegram_id !== telegramId));
 }
 
 function getCandidateRecord(telegramId) {
@@ -238,6 +256,78 @@ function scheduleFollowUp(candidateId, employerId) {
 
 // ── חיבורים ──────────────────────────────────────────────────────────────────
 
+function workplaceMatches(candidatePref, orgType) {
+  if (!candidatePref || candidatePref === "שניהם") return true;
+  return candidatePref === orgType;
+}
+
+// ── חיבור אוטומטי ──────────────────────────────────────────────────────────────
+
+async function autoConnect(candidate, employer) {
+  const candidateId = candidate.telegram_id;
+  const employerId  = employer.telegram_id;
+  const cd = candidate.data;
+  const ed = employer.data;
+
+  // שלח ללשכה/עירייה את פרטי המועמד
+  await bot.sendMessage(
+    employerId,
+    `🎉 נמצאה התאמה חדשה דרך אקדמיה B!\n\n` +
+    `שם: ${cd.full_name || ""}\n` +
+    `נייד: ${cd.phone || ""}\n` +
+    `מייל: ${cd.email || ""}\n` +
+    `תואר: ${cd.degree || ""} — ${cd.field_of_study || ""}\n` +
+    `ניסיון: ${cd.experience || ""}\n` +
+    (getRecommendation(candidateId) ? `\n⭐ המלצה: "${getRecommendation(candidateId).text}"\n` : "") +
+    (cd.references ? `\n📋 ממליצים: ${cd.references}\n` : "") +
+    `\nבהצלחה! 🌟`,
+    {
+      reply_markup: {
+        inline_keyboard: [[
+          { text: "הפסק לקבל הצעות מתאימות מסוג זה 🔕", callback_data: `STOP_OFFERS_EMPLOYER_${employerId}` },
+        ]],
+      },
+    }
+  );
+
+  if (cd.cv) {
+    if (cd.cv.startsWith("file_id:")) {
+      await bot.sendDocument(employerId, cd.cv.replace("file_id:", ""), {}, { caption: "קורות חיים" });
+    } else if (cd.cv.startsWith("photo_id:")) {
+      await bot.sendPhoto(employerId, cd.cv.replace("photo_id:", ""), { caption: "קורות חיים" });
+    }
+  }
+
+  // שלח למועמד את פרטי הלשכה/עירייה
+  await bot.sendMessage(
+    candidateId,
+    `🎉 נמצאה התאמה חדשה!\n\n` +
+    `🏛 ${ed.org_type || "לשכה"}: ${ed.contact_name || ""}\n` +
+    `נייד: ${ed.phone || ""}\n` +
+    `מייל: ${ed.email || ""}\n\n` +
+    `בהצלחה! 🌟`,
+    {
+      reply_markup: {
+        inline_keyboard: [[
+          { text: "הפסק לקבל הצעות מתאימות מסוג זה 🔕", callback_data: `STOP_OFFERS_CANDIDATE_${candidateId}` },
+        ]],
+      },
+    }
+  );
+
+  // עדכון אדמין — לצפייה בלבד
+  await bot.sendMessage(
+    ADMIN_ID,
+    `🔗 חיבור אוטומטי בוצע\n\n` +
+    `👤 מועמד: ${cd.full_name || ""}\n` +
+    `🏛 ${ed.org_type || "לשכה"}: ${ed.contact_name || ""}\n` +
+    `תחומים: ${cd.interests || ""}`
+  );
+
+  recordMatch(candidateId, employerId, cd.full_name || "מועמד", ed.contact_name || "לשכה");
+  scheduleFollowUp(candidateId, employerId);
+}
+
 function findMatches(employer) {
   const candidates = readJSON(CANDIDATES_FILE);
   const fields = (employer.data.fields || "").split(", ");
@@ -245,6 +335,7 @@ function findMatches(employer) {
   return candidates.filter((c) => {
     if (paused.includes(c.telegram_id)) return false;
     if (hasBeenMatched(c.telegram_id, employer.telegram_id)) return false;
+    if (!workplaceMatches(c.data.workplace_pref, employer.data.org_type)) return false;
     const interests = (c.data.interests || "").split(", ");
     return fields.some((f) => interests.some((i) => i.trim() === f.trim()));
   });
@@ -253,9 +344,12 @@ function findMatches(employer) {
 // מציאת לשכות מתאימות למועמד חדש
 function findMatchingEmployers(candidate) {
   const employers = readJSON(EMPLOYERS_FILE);
+  const pausedEmployers = readJSON(PAUSED_EMPLOYERS_FILE).map((p) => p.telegram_id);
   const interests = (candidate.data.interests || "").split(", ").map((i) => i.trim());
   return employers.filter((e) => {
+    if (pausedEmployers.includes(e.telegram_id)) return false;
     if (hasBeenMatched(candidate.telegram_id, e.telegram_id)) return false;
+    if (!workplaceMatches(candidate.data.workplace_pref, e.data.org_type)) return false;
     const fields = (e.data.fields || "").split(", ").map((f) => f.trim());
     return fields.some((f) => interests.includes(f));
   });
@@ -268,10 +362,11 @@ function exportExcel() {
     const candidates = readJSON(CANDIDATES_FILE);
     const employers  = readJSON(EMPLOYERS_FILE);
 
-    const CANDIDATE_HEADERS = ["תאריך","טלגרם","שם מלא","נייד","מייל","עיר","תואר","תחום לימודים","שנת סיום","שפות","ניסיון","תחומי עניין","זמינות","קורות חיים","מוטיבציה","הצהרה","סטטוס"];
-    const EMPLOYER_HEADERS  = ["תאריך","טלגרם","שם ותפקיד","נייד","מייל","תחומים","היקף","תזמון","חשיבות ניסיון","הערות","הצהרה"];
+    const CANDIDATE_HEADERS = ["תאריך","טלגרם","שם מלא","נייד","מייל","עיר","תואר","תחום לימודים","שפות","עבר התמחות","ניסיון","תחומי עניין","מקום עבודה מועדף","זמינות","קורות חיים","מוטיבציה","הצהרה","סטטוס","הוצע ל"];
+    const EMPLOYER_HEADERS  = ["תאריך","טלגרם","מטעם","שם ותפקיד","נייד","מייל","תחומים","היקף","תזמון","חשיבות ניסיון","הערות","הצהרה","סטטוס"];
 
     const paused = readJSON(PAUSED_FILE).map((p) => p.telegram_id);
+    const pausedEmployers = readJSON(PAUSED_EMPLOYERS_FILE).map((p) => p.telegram_id);
 
     const fmtC = (r) => {
       const d = r.data || {};
@@ -280,8 +375,9 @@ function exportExcel() {
         "טלגרם": r.telegram_username ? `@${r.telegram_username}` : String(r.telegram_id || ""),
         "שם מלא": d.full_name || "", "נייד": d.phone || "", "מייל": d.email || "",
         "עיר": d.city || "", "תואר": d.degree || "", "תחום לימודים": d.field_of_study || "",
-        "שנת סיום": d.graduation_year || "", "שפות": d.languages || "",
+        "שפות": d.languages || "", "עבר התמחות": d.is_intern || "",
         "ניסיון": d.experience || "", "תחומי עניין": d.interests || "",
+        "מקום עבודה מועדף": d.workplace_pref || "",
         "מועד פנוי": d.timing || "", "זמינות": d.availability || "", "קורות חיים": d.cv || "",
         "מוטיבציה": d.motivation || "", "הצהרה": d.declaration || "",
         "סטטוס": paused.includes(r.telegram_id) ? "מושהה" : "פעיל",
@@ -296,10 +392,12 @@ function exportExcel() {
       return {
         "תאריך": r.timestamp ? new Date(r.timestamp).toLocaleString("he-IL") : "",
         "טלגרם": r.telegram_username ? `@${r.telegram_username}` : String(r.telegram_id || ""),
+        "מטעם": d.org_type || "",
         "שם ותפקיד": d.contact_name || "", "נייד": d.phone || "", "מייל": d.email || "",
         "תחומים": d.fields || "", "מועד": d.timing || "", "היקף": d.availability || "",
         "חשיבות ניסיון": d.experience_importance || "", "הערות": d.notes || "",
         "הצהרה": d.declaration || "",
+        "סטטוס": pausedEmployers.includes(r.telegram_id) ? "מושהה" : "פעיל",
       };
     };
 
@@ -349,9 +447,9 @@ function exportExcel() {
 function formatRecord(type, session) {
   const d = session.data;
   if (type === "candidate") {
-    return `שם: ${d.full_name}\nטלפון: ${d.phone}\nמייל: ${d.email}\nעיר: ${d.city}\nתואר: ${d.degree}\nלמד: ${d.field_of_study}\nשנה: ${d.graduation_year}\nשפות: ${d.languages}\nניסיון: ${d.experience}\nתחומים: ${d.interests}\nמועד: ${d.timing}\nזמינות: ${d.availability}\nמוטיבציה: ${d.motivation}`;
+    return `שם: ${d.full_name}\nטלפון: ${d.phone}\nמייל: ${d.email}\nעיר: ${d.city}\nתואר: ${d.degree}\nלמד: ${d.field_of_study}\nשפות: ${d.languages}\nעבר התמחות: ${d.is_intern}\nניסיון: ${d.experience}\nתחומים: ${d.interests}\nמקום עבודה מועדף: ${d.workplace_pref}\nמועד: ${d.timing}\nזמינות: ${d.availability}\nמוטיבציה: ${d.motivation}`;
   } else {
-    return `איש קשר: ${d.contact_name}\nטלפון: ${d.phone}\nמייל: ${d.email}\nתחום: ${d.fields}\nמועד: ${d.timing}\nהיקף: ${d.availability}\nניסיון: ${d.experience_importance}\nדגשים: ${d.notes}`;
+    return `מטעם: ${d.org_type}\nאיש קשר: ${d.contact_name}\nטלפון: ${d.phone}\nמייל: ${d.email}\nתחום: ${d.fields}\nמועד: ${d.timing}\nהיקף: ${d.availability}\nניסיון: ${d.experience_importance}\nדגשים: ${d.notes}`;
   }
 }
 
@@ -413,10 +511,12 @@ const CANDIDATE_STEPS = [
   { key: "degree",            question: "מה התואר?",                                                                            type: "single", options: [["תואר ראשון", "תואר שני"], ["אין תואר"]] },
   { key: "field_of_study",    question: "מה תחום הלימודים?",                                                                    type: "text"   },
   { key: "languages",         question: "באילו שפות יש שליטה?\nאפשר לסמן כמה ולחץ סיום ✓",                                  type: "multi",  options: [["עברית", "אנגלית"], ["ערבית", "רוסית"], ["אחר", "סיום ✓"]] },
-  { key: "internship_mentor", question: "אצל מי התמחית? (שם הדובר/ת וועדה)",                                                   type: "text"   },
-  { key: "internship_phone",  question: "מה מספר הנייד שלו/ה?",                                                                 type: "text"   },
+  { key: "is_intern",         question: "האם עברת התמחות בכנסת?",                                                               type: "single", options: [["כן ✅", "לא ❌"]] },
+  { key: "internship_mentor", question: "אצל מי התמחית? (שם הדובר/ת וועדה)",                                                   type: "text",   conditional: "is_intern=כן ✅" },
+  { key: "internship_phone",  question: "מה מספר הנייד שלו/ה?",                                                                 type: "text",   conditional: "is_intern=כן ✅" },
   { key: "experience",        question: "ספר לנו על הניסיון המקצועי שלך – מה הדרך עד כה?",                                    type: "text"   },
   { key: "interests",         question: "באילו תחומים יש התמחות או עניין?\nאפשר לסמן כמה ולחץ סיום ✓",                      type: "multi",  options: [["ייעוץ פרלמנטרי", "דוברות"], ["סושיאל ורשתות חברתיות", "יועץ פוליטי"], ["עריכת וידאו", "סיום ✓"]] },
+  { key: "workplace_pref",    question: "איפה אתה מעדיף לעבוד?",                                                                type: "single", options: [["כנסת", "עירייה"], ["שניהם"]] },
   { key: "timing",            question: "מתי אתה פנוי להתחיל?",                                                                 type: "single", options: [["מיידי", "בחודש הקרוב"], ["גמיש / פתוח"]] },
   { key: "availability",      question: "מה היקף המשרה המבוקש?",                                                                type: "single", options: [["משרה מלאה", "משרה חלקית"], ["פרילנס", "פתוח לכל הצעה"]] },
   { key: "cv",                question: "קורות חיים 📎\nגם לא מושלמים – ניצור קשר אם יידרשו פרטים נוספים.",                  type: "file"   },
@@ -427,12 +527,13 @@ const CANDIDATE_STEPS = [
 ];
 
 const EMPLOYER_STEPS = [
-  { key: "contact_name",         question: "נתחיל 🙂 שם ותפקיד בלשכה?",                                                         type: "text"   },
+  { key: "org_type",             question: "אתם מטעם...?",                                                                       type: "single", options: [["כנסת", "עירייה"]] },
+  { key: "contact_name",         question: "נתחיל 🙂 שם ותפקיד?",                                                                type: "text"   },
   { key: "email",                question: "כתובת מייל?",                                                                        type: "email"  },
   { key: "fields",               question: "מה תחום החיזוק המבוקש?\nאפשר לסמן כמה ולחץ סיום ✓",                              type: "multi",  options: [["ייעוץ פרלמנטרי", "דוברות"], ["סושיאל ורשתות חברתיות", "יועץ פוליטי"], ["עריכת וידאו", "סיום ✓"]] },
   { key: "timing",               question: "מתי נדרש מישהו?",                                                                    type: "single", options: [["מיידי", "בחודש הקרוב"], ["גמיש / פתוח"]] },
   { key: "availability",         question: "מה היקף המשרה המבוקשת?",                                                            type: "single", options: [["משרה מלאה", "משרה חלקית"], ["פרילנס", "פתוח לכל הצעה"]] },
-  { key: "experience_importance",question: "כמה חשוב ניסיון קודם בעבודה פרלמנטרית?",                                            type: "single", options: [["חובה מוחלטת", "יתרון משמעותי"], ["לא הכרחי"]] },
+  { key: "experience_importance",question: "כמה חשוב ניסיון קודם בעבודה ציבורית/פרלמנטרית?",                                     type: "single", options: [["חובה מוחלטת", "יתרון משמעותי"], ["לא הכרחי"]] },
   { key: "notes",                question: "יש דגשים נוספים שחשוב שנדע?\nאפשר לכתוב בחופשיות, גם 'אין' זה תשובה 😊",          type: "text"   },
   { key: "declaration",          question: "לידיעה –\nהפנייה מיועדת לצורכי היכרות וחיבור מקצועי בלבד,\nואינה מהווה התחייבות מכל סוג.", type: "single", options: [["מאשר ✅"]] },
 ];
@@ -527,29 +628,17 @@ async function finishSession(chatId, session) {
       await bot.sendMessage(ADMIN_ID, mentorMsg, { parse_mode: "Markdown" });
     }
 
-    // חפש לשכות קיימות שמתאימות
+    // חפש לשכות קיימות שמתאימות — חיבור אוטומטי
     const newCandidate = readJSON(CANDIDATES_FILE).find((c) => c.telegram_id === chatId);
     if (newCandidate) {
       const matchingEmployers = findMatchingEmployers(newCandidate);
       for (const employer of matchingEmployers) {
-        const matchSummary =
-          `🔗 התאמה פוטנציאלית למועמד חדש!\n\n` +
-          `👤 מועמד: ${newCandidate.data.full_name}\nתחומים: ${newCandidate.data.interests}\nזמינות: ${newCandidate.data.availability}\n\n` +
-          `🏛 לשכה: ${employer.data.contact_name}\nתחום: ${employer.data.fields}`;
-        await bot.sendMessage(ADMIN_ID, matchSummary, {
-          reply_markup: {
-            inline_keyboard: [[
-              { text: "אשר חיבור ✅", callback_data: `APPROVE_${chatId}_${employer.telegram_id}` },
-              { text: "דחה ❌",       callback_data: `REJECT_${chatId}_${employer.telegram_id}`  },
-            ]],
-          },
-        });
-
+        await autoConnect(newCandidate, employer);
       }
       if (matchingEmployers.length > 0) {
         await bot.sendMessage(
           chatId,
-          `👋 היי! נמצאו ${matchingEmployers.length} לשכות שעשויות להתאים לפרופיל שלך.\nאם תאושר התאמה — נחזור אליך 🙂`
+          `👋 היי! נמצאו ${matchingEmployers.length} לשכות/עיריות מתאימות — הפרטים שלך הועברו אליהן 🙂`
         );
       }
     }
@@ -560,33 +649,14 @@ async function finishSession(chatId, session) {
     );
     await bot.sendMessage(ADMIN_ID, `📥 לשכה חדשה נרשמה!\n\n${formatRecord("employer", session)}`);
 
-    // חיפוש התאמות מיידי
-    const matches = findMatches({ data: session.data });
+    // חיפוש התאמות מיידי — חיבור אוטומטי
+    const newEmployer = readJSON(EMPLOYERS_FILE).find((e) => e.telegram_id === chatId);
+    const matches = findMatches({ data: session.data, telegram_id: chatId });
     for (const match of matches) {
-      const matchSummary =
-        `🔗 התאמה פוטנציאלית!\n\n` +
-        `👤 מועמד: ${match.data.full_name}\nטלפון: ${match.data.phone}\nתחומים: ${match.data.interests}\nמועד: ${match.data.timing}\nזמינות: ${match.data.availability}\n\n` +
-        `🏛 לשכה: ${session.data.contact_name}\nטלפון: ${session.data.phone}\nתחום: ${session.data.fields}`;
-      await bot.sendMessage(ADMIN_ID, matchSummary, {
-        reply_markup: {
-          inline_keyboard: [[
-            { text: "אשר חיבור ✅", callback_data: `APPROVE_${match.telegram_id}_${chatId}` },
-            { text: "דחה ❌",       callback_data: `REJECT_${match.telegram_id}_${chatId}`  },
-          ]],
-        },
-      });
-
+      await autoConnect(match, newEmployer || { data: session.data, telegram_id: chatId });
     }
-    // התראה מיידית לכל המועמדים — הודעה אחת לכל אחד
-    const notifiedCandidates = new Set();
-    for (const match of matches) {
-      if (!notifiedCandidates.has(match.telegram_id)) {
-        await bot.sendMessage(
-          match.telegram_id,
-          `👋 היי! לשכה חדשה נרשמה למאגר שעשויה להתאים לפרופיל שלך.\nאם תאושר התאמה — נחזור אליך 🙂`
-        );
-        notifiedCandidates.add(match.telegram_id);
-      }
+    if (matches.length > 0) {
+      await bot.sendMessage(chatId, `👋 נמצאו ${matches.length} מועמדים מתאימים — הפרטים הועברו אליהם 🙂`);
     }
   }
   exportExcel();
@@ -681,7 +751,12 @@ bot.on("message", async (msg) => {
       return;
     }
 
-    if (lower.includes("החזר אותי לפעילות") || lower.includes("החזר אותי לפעילות")) {
+    if (lower.includes("החזר אותי לפעילות")) {
+      if (isEmployerPaused(chatId)) {
+        resumeEmployer(chatId);
+        await bot.sendMessage(chatId, "שמחים שחזרתם! 🎉\nתחזרו לקבל הצעות התאמה אוטומטיות.");
+        return;
+      }
       if (!isPaused(chatId)) {
         await bot.sendMessage(chatId, "הפרופיל שלך כבר פעיל 🙂");
         return;
@@ -773,6 +848,18 @@ bot.on("message", async (msg) => {
     await bot.sendMessage(chatId, "תודה רבה! 🙏\nההמלצה נשמרה ותועבר ללשכות הרלוונטיות בעת חיבור.");
     await bot.sendMessage(ADMIN_ID, `⭐ התקבלה המלצה על מועמד ID: ${session.candidateId}\n\n"${rec}"`);
     delete sessions[chatId];
+    return;
+  }
+
+  // ── קוד אישור לשכה/עירייה ──
+  if (session && session.stage === "awaiting_employer_code") {
+    if (text.trim() === EMPLOYER_ACCESS_CODE) {
+      sessions[chatId] = { ...newSession("employer", session.username), data: {} };
+      await bot.sendMessage(chatId, "קוד אומת ✅\n\nהיי! אני קוזו 👋 העוזר של אקדמיה B.\n\nבואו נתחיל 🙂");
+      await sendStep(chatId, sessions[chatId]);
+    } else {
+      await bot.sendMessage(chatId, "קוד שגוי 🙏 פנו לצוות אקדמיה B לקבלת קוד תקין.");
+    }
     return;
   }
 
@@ -901,100 +988,22 @@ bot.on("callback_query", async (query) => {
     return;
   }
 
-  // אישור חיבור — שלב 1
-  if (data.startsWith("APPROVE_") && !data.startsWith("APPROVE_ACCESS_")) {
-    const parts = data.split("_");
-    const candidateId = Number(parts[1]);
-    const employerId  = Number(parts[2]);
-
-    addPendingMatch(candidateId, employerId);
-
-    await bot.sendMessage(
-      candidateId,
-      "היי, יש לשכה שמעוניינת בפרופיל שלך 🙂\nהאם להעביר את הפרטים?",
-      {
-        reply_markup: {
-          inline_keyboard: [[
-            { text: "כן, בטח ✅", callback_data: `CONSENT_YES_${candidateId}_${employerId}` },
-            { text: "לא תודה ❌", callback_data: `CONSENT_NO_${candidateId}_${employerId}`  },
-          ]],
-        },
-      }
-    );
-    await bot.sendMessage(ADMIN_ID, "⏳ בקשת הסכמה נשלחה למועמד.");
+  // הפסקת הצעות — לשכה/עירייה
+  if (data.startsWith("STOP_OFFERS_EMPLOYER_")) {
+    const employerId = Number(data.replace("STOP_OFFERS_EMPLOYER_", ""));
+    pauseEmployer(employerId);
+    await bot.sendMessage(chatId, "סגור 🙏 לא תקבלו יותר הצעות התאמה אוטומטיות.\nאפשר לחזור בכל עת ע\"י כתיבת *החזר אותי לפעילות*", { parse_mode: "Markdown" });
+    await bot.sendMessage(ADMIN_ID, `⏸ לשכה/עירייה הפסיקה לקבל הצעות (ID: ${employerId})`);
     return;
   }
 
-  // תגובת המועמד לחיבור
-  if (data.startsWith("CONSENT_YES_") || data.startsWith("CONSENT_NO_")) {
-    const parts       = data.split("_");
-    const approved    = parts[1] === "YES";
-    const candidateId = Number(parts[2]);
-    const employerId  = Number(parts[3]);
-
-    removePendingMatch(candidateId, employerId);
-
-    if (!approved) {
-      await bot.sendMessage(employerId, "המועמד בחר שלא להעביר פרטים הפעם 🙏");
-      await bot.sendMessage(chatId, "הבחירה נרשמה. תודה 🙏");
-      return;
-    }
-
-    const candidates = readJSON(CANDIDATES_FILE);
-    const candidate  = candidates.find((c) => c.telegram_id === candidateId);
-
-    if (!candidate) {
-      await bot.sendMessage(chatId, "לא נמצאו פרטי המועמד במערכת.");
-      return;
-    }
-
-    const cd = candidate.data;
-    await bot.sendMessage(
-      employerId,
-      `🎉 יש התאמה!\n\nנמצא מועמד מתאים דרך אקדמיה B.\n\n` +
-      `שם: ${cd.full_name || ""}\n` +
-      `נייד: ${cd.phone || ""}\n` +
-      `מייל: ${cd.email || ""}\n` +
-      `תואר: ${cd.degree || ""} — ${cd.field_of_study || ""}\n` +
-      `ניסיון: ${cd.experience || ""}\n` +
-      (getRecommendation(candidateId) ? `\n⭐ המלצה: "${getRecommendation(candidateId).text}"\n` : "") +
-      (cd.references ? `\n📋 ממליצים: ${cd.references}\n` : "") +
-      `\nבהצלחה! 🌟`
-    );
-
-    if (cd.cv) {
-      if (cd.cv.startsWith("file_id:")) {
-        await bot.sendDocument(employerId, cd.cv.replace("file_id:", ""), {}, { caption: "קורות חיים" });
-      } else if (cd.cv.startsWith("photo_id:")) {
-        await bot.sendPhoto(employerId, cd.cv.replace("photo_id:", ""), { caption: "קורות חיים" });
-      }
-    }
-
-    // שלח ליועץ את פרטי הלשכה
-    const employers = readJSON(EMPLOYERS_FILE);
-    const employer = employers.find((e) => e.telegram_id === employerId);
-    const ed = employer?.data || {};
-    await bot.sendMessage(
-      candidateId,
-      `🎉 מעולה! הפרטים שלך הועברו ללשכה.\n\n` +
-      `🏛 פרטי הלשכה:\n` +
-      `איש קשר: ${ed.contact_name || ""}\n` +
-      `נייד: ${ed.phone || ""}\n` +
-      `מייל: ${ed.email || ""}\n\n` +
-      `בהצלחה! 🌟`
-    );
-    await bot.sendMessage(chatId, "הפרטים הועברו. בהצלחה! 🌟");
-    await bot.sendMessage(ADMIN_ID, "✅ החיבור אושר ופרטי המועמד נשלחו ללשכה.\n📅 תזכורת מעקב תישלח בעוד 7 ימים.");
-
-    // שמור היסטוריה וקבע follow-up
-    recordMatch(candidateId, employerId, cd.full_name || "מועמד", "לשכה");
-    scheduleFollowUp(candidateId, employerId);
-    return;
-  }
-
-  // דחיית חיבור
-  if (data.startsWith("REJECT_")) {
-    await bot.sendMessage(ADMIN_ID, "❌ ההתאמה נדחתה.");
+  // הפסקת הצעות — מועמד
+  if (data.startsWith("STOP_OFFERS_CANDIDATE_")) {
+    const candidateId = Number(data.replace("STOP_OFFERS_CANDIDATE_", ""));
+    pauseCandidate(candidateId);
+    exportExcel();
+    await bot.sendMessage(chatId, "סגור 🙏 לא תקבל יותר הצעות התאמה אוטומטיות.\nאפשר לחזור בכל עת ע\"י כתיבת *החזר אותי לפעילות*", { parse_mode: "Markdown" });
+    await bot.sendMessage(ADMIN_ID, `⏸ מועמד הפסיק לקבל הצעות (ID: ${candidateId})`);
     return;
   }
 
@@ -1052,13 +1061,26 @@ bot.on("callback_query", async (query) => {
       sessions[chatId] = { stage: "awaiting_phone", username: session.username, pendingType: "candidate" };
       await bot.sendMessage(chatId, "מה מספר הנייד שלך?");
     } else if (data === "EMPLOYER") {
-      // לשכה — ממשיכה ישר לשאלות
-      sessions[chatId] = { ...newSession("employer", session.username), data: {} };
-      await bot.sendMessage(chatId, "היי! אני קוזו 👋 העוזר של אקדמיה B.\n\nבואו נתחיל 🙂");
-      await sendStep(chatId, sessions[chatId]);
+      // לשכה/עירייה — דורשת קוד אישור לפני שמתחילים
+      sessions[chatId] = { stage: "awaiting_employer_code", username: session.username };
+      await bot.sendMessage(
+        chatId,
+        "כדי להירשם כלשכה/עירייה במאגר, צריך קוד אישור.\n\n📞 לקבלת קוד, צרו קשר עם הצוות שלנו:",
+        {
+          reply_markup: {
+            inline_keyboard: [[
+              { text: "💬 צור קשר לקבלת קוד", url: ADMIN_PHONE_LINK },
+            ]],
+          },
+        }
+      );
+      await bot.sendMessage(chatId, "כשיהיה לכם קוד — שלחו אותו כאן:");
     }
     return;
   }
+
+  if (session.stage === "awaiting_employer_code") return;
+
 
   if (!session.verified && session.stage !== "updating") return;
 
