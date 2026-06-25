@@ -697,12 +697,12 @@ bot.onText(/\/start/, async (msg) => {
   sessions[chatId] = { stage: "awaiting_type", username: msg.from.username || "" };
   await bot.sendMessage(
     chatId,
-    "שלום וברוכים הבאים לאקדמיה B 👋\n\nאנחנו מחברים בין לשכות כנסת ליועצים פרלמנטריים ודוברים מקצועיים.\n\nמי פונה אלינו היום?",
+    "שלום וברוכים הבאים לאקדמיה B 👋\n\nאנחנו מחברים בין לשכות כנסת ועיריות ליועצים פרלמנטריים, יועצים פוליטיים ודוברים מקצועיים.\n\nמי פונה אלינו היום?",
     {
       reply_markup: {
         inline_keyboard: [
           [{ text: "👤 יועץ / דובר – מחפש הזדמנות מקצועית", callback_data: "CANDIDATE" }],
-          [{ text: "🏛 לשכת כנסת – מחפשת איש מקצוע",        callback_data: "EMPLOYER"  }],
+          [{ text: "🏛 לשכה / עירייה – מחפשים איש מקצוע",     callback_data: "EMPLOYER"  }],
         ],
       },
     }
