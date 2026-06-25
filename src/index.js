@@ -527,7 +527,7 @@ const CANDIDATE_STEPS = [
 ];
 
 const EMPLOYER_STEPS = [
-  { key: "org_type",             question: "אתם מטעם...?",                                                                       type: "single", options: [["כנסת", "עירייה"]] },
+  { key: "org_type",             question: "אתם מטעם...?",                                                                       type: "single", options: [["כנסת", "עירייה"], ["משרד יח\"צ / סושיאל", "אחר"]] },
   { key: "contact_name",         question: "נתחיל 🙂 שם ותפקיד?",                                                                type: "text"   },
   { key: "email",                question: "כתובת מייל?",                                                                        type: "email"  },
   { key: "fields",               question: "מה תחום החיזוק המבוקש?\nאפשר לסמן כמה ולחץ סיום ✓",                              type: "multi",  options: [["ייעוץ פרלמנטרי", "דוברות"], ["סושיאל ורשתות חברתיות", "יועץ פוליטי"], ["עריכת וידאו", "סיום ✓"]] },
@@ -697,12 +697,12 @@ bot.onText(/\/start/, async (msg) => {
   sessions[chatId] = { stage: "awaiting_type", username: msg.from.username || "" };
   await bot.sendMessage(
     chatId,
-    "שלום וברוכים הבאים לאקדמיה B 👋\n\nאנחנו מחברים בין לשכות כנסת ועיריות ליועצים פרלמנטריים, יועצים פוליטיים ודוברים מקצועיים.\n\nמי פונה אלינו היום?",
+    "שלום וברוכים הבאים לאקדמיה B 👋\n\nאנחנו מחברים בין לשכות כנסת ליועצים פרלמנטריים ודוברים מקצועיים.\n\nמי פונה אלינו היום?",
     {
       reply_markup: {
         inline_keyboard: [
           [{ text: "👤 יועץ / דובר – מחפש הזדמנות מקצועית", callback_data: "CANDIDATE" }],
-          [{ text: "🏛 לשכה / עירייה – מחפשים איש מקצוע",     callback_data: "EMPLOYER"  }],
+          [{ text: "🏛 לשכת כנסת – מחפשת איש מקצוע",        callback_data: "EMPLOYER"  }],
         ],
       },
     }
