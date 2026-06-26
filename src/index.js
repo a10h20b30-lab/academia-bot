@@ -701,8 +701,8 @@ bot.onText(/\/start/, async (msg) => {
     {
       reply_markup: {
         inline_keyboard: [
-          [{ text: "👤 יועץ / דובר – מחפש הזדמנות מקצועית", callback_data: "CANDIDATE" }],
-          [{ text: "🏛 לשכת כנסת – מחפשת איש מקצוע",        callback_data: "EMPLOYER"  }],
+          [{ text: "👤 מחפש הזדמנות מקצועית", callback_data: "CANDIDATE" }],
+          [{ text: "🔎 מחפשים איש מקצוע", callback_data: "EMPLOYER" }],
         ],
       },
     }
