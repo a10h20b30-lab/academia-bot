@@ -272,7 +272,7 @@ async function autoConnect(candidate, employer) {
   // שלח ללשכה/עירייה את פרטי המועמד
   await bot.sendMessage(
     employerId,
-    `🎉 נמצאה התאמה חדשה דרך אקדמיה B!\n\n` +
+    `🎉 נמצאה התאמה חדשה דרך קוזו!\n\n` +
     `שם: ${cd.full_name || ""}\n` +
     `נייד: ${cd.phone || ""}\n` +
     `מייל: ${cd.email || ""}\n` +
@@ -415,8 +415,8 @@ function exportExcel() {
     };
 
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, makeSheet("רשימת יועצים ודוברים — אקדמיה B", CANDIDATE_HEADERS, candidates.map(fmtC)), "יועצים ודוברים");
-    XLSX.utils.book_append_sheet(wb, makeSheet("רשימת לשכות חברי כנסת — אקדמיה B", EMPLOYER_HEADERS, employers.map(fmtE)), "חברי כנסת");
+    XLSX.utils.book_append_sheet(wb, makeSheet("רשימת יועצים ודוברים — קוזו", CANDIDATE_HEADERS, candidates.map(fmtC)), "יועצים ודוברים");
+    XLSX.utils.book_append_sheet(wb, makeSheet("רשימת לשכות חברי כנסת — קוזו", EMPLOYER_HEADERS, employers.map(fmtE)), "חברי כנסת");
 
     // גיליון ארכיון
     const archived = readJSON(ARCHIVE_FILE);
@@ -434,7 +434,7 @@ function exportExcel() {
       "שמע עלינו": r.heard_from || "",
       "סטטוס": r.status === "approved" ? "✅ אושר" : r.status === "denied" ? "❌ נדחה" : "⏳ ממתין",
     });
-    XLSX.utils.book_append_sheet(wb, makeSheet("בקשות הצטרפות — אקדמיה B", ACCESS_HEADERS, accessRequests.map(fmtA)), "בקשות הצטרפות");
+    XLSX.utils.book_append_sheet(wb, makeSheet("בקשות הצטרפות — קוזו", ACCESS_HEADERS, accessRequests.map(fmtA)), "בקשות הצטרפות");
 
     const outPath = path.join(__dirname, "../טבלה נתונים.xlsx");
     XLSX.writeFile(wb, outPath);
@@ -455,12 +455,12 @@ function formatRecord(type, session) {
 
 // ── Claude chat ───────────────────────────────────────────────────────────────
 
-const CHAT_SYSTEM = `אתה קוזו – נציג דיגיטלי של אקדמיה B, מערכת חיבור בין לשכות כנסת ליועצים פרלמנטריים ודוברים.
+const CHAT_SYSTEM = `אתה קוזו – בוט שמכיר את כל אנשי המקצוע בתחום הפוליטי ומחבר ביניהם.
 
 כללים:
 - דבר תמיד בעברית בלבד.
 - היה חם, מקצועי, תמציתי.
-- ענה רק על שאלות שקשורות ל: רישום, חיבורים, השהייה/חזרה, מצב הפרופיל, מה זה אקדמיה B.
+- ענה רק על שאלות שקשורות ל: רישום, חיבורים, השהייה/חזרה, מצב הפרופיל, מה זה קוזו.
 - אם שואלים שאלות שלא קשורות – הסבר בנימוס שאתה כאן רק לצורך החיבורים המקצועיים.
 - אל תמציא מידע על חברי כנסת, לשכות ספציפיות, או מועמדים.
 - אם המשתמש רוצה להירשם, להשהות, להחזר אותי לפעילות, או לעדכן פרטים – תאמר לו שיכתוב את המילה המתאימה:
@@ -520,7 +520,7 @@ const CANDIDATE_STEPS = [
   { key: "timing",            question: "מתי אתה פנוי להתחיל?",                                                                 type: "single", options: [["מיידי", "בחודש הקרוב"], ["גמיש / פתוח"]] },
   { key: "availability",      question: "מה היקף המשרה המבוקש?",                                                                type: "single", options: [["משרה מלאה", "משרה חלקית"], ["פרילנס", "פתוח לכל הצעה"]] },
   { key: "cv",                question: "קורות חיים 📎\nגם לא מושלמים – ניצור קשר אם יידרשו פרטים נוספים.",                  type: "file"   },
-  { key: "motivation",        question: "למה חשוב להיות חלק מאקדמיה B?\nכמה מילים מהלב 🙂",                                   type: "text"   },
+  { key: "motivation",        question: "למה חשוב להיות חלק מקוזו?\nכמה מילים מהלב 🙂",                                   type: "text"   },
   { key: "has_references",    question: "האם יש לך ממליצים שלשכות יוכלו לפנות אליהם?",                                         type: "single", options: [["כן ✅", "לא ❌"]] },
   { key: "references",        question: "מצוין! ציין שם ונייד של הממליצים (אפשר כמה, מופרדים בשורות)",                         type: "text",   conditional: "has_references=כן ✅" },
   { key: "declaration",       question: "לידיעה –\nהטופס משמש כמאגר לצורך בחינת חיבורים אפשריים.\nאין בהגשת הפרטים משום התחייבות.", type: "single", options: [["מאשר ✅"]] },
@@ -606,7 +606,7 @@ async function finishSession(chatId, session) {
   if (session.type === "candidate") {
     await bot.sendMessage(
       chatId,
-      "תודה רבה! 🙏\nהפרטים נקלטו במערכת אקדמיה B.\nאם תימצא התאמה רלוונטית – ניצור קשר 🙂\n\nבכל עת אפשר לכתוב:\n• *השהה אותי* – להפסיק זמנית לחפש\n• *עדכן פרטים* – לרענן את הפרופיל",
+      "תודה רבה! 🙏\nהפרטים נקלטו אצל קוזו.\nאם תימצא התאמה רלוונטית – ניצור קשר 🙂\n\nבכל עת אפשר לכתוב:\n• *השהה אותי* – להפסיק זמנית לחפש\n• *עדכן פרטים* – לרענן את הפרופיל",
       { parse_mode: "Markdown" }
     );
     await bot.sendMessage(ADMIN_ID, `📥 מועמד חדש נרשם!\n\n${formatRecord("candidate", session)}`);
@@ -620,7 +620,7 @@ async function finishSession(chatId, session) {
         `📱 ${session.data.internship_phone}\n\n` +
         `*טקסט מוכן לשליחה בוואטסאפ:*\n` +
         `━━━━━━━━━━━━━━━━━━\n` +
-        `שלום, אני מאקדמיה B.\n` +
+        `שלום, אני קוזו.\n` +
         `${session.data.full_name} שהתמחה אצלך ציין אותך בפרופיל שלו/ה.\n` +
         `אם תרצה/י להמליץ עליו/ה — פתח/י את הבוט כאן:\n` +
         `t.me/academiaB_advisor_bot\n` +
@@ -645,7 +645,7 @@ async function finishSession(chatId, session) {
   } else {
     await bot.sendMessage(
       chatId,
-      "תודה! 🙏\nהפנייה התקבלה במערכת אקדמיה B.\nאם תימצא התאמה רלוונטית – ניצור קשר בהתאם 🙂\n\nאקדמיה B"
+      "תודה! 🙏\nהפנייה התקבלה אצל קוזו.\nאם תימצא התאמה רלוונטית – ניצור קשר בהתאם 🙂\n\nקוזו"
     );
     await bot.sendMessage(ADMIN_ID, `📥 לשכה חדשה נרשמה!\n\n${formatRecord("employer", session)}`);
 
@@ -697,7 +697,7 @@ bot.onText(/\/start/, async (msg) => {
   sessions[chatId] = { stage: "awaiting_type", username: msg.from.username || "" };
   await bot.sendMessage(
     chatId,
-    "שלום וברוכים הבאים לאקדמיה B 👋\n\nאנחנו מחברים בין לשכות כנסת ליועצים פרלמנטריים ודוברים מקצועיים.\n\nמי פונה אלינו היום?",
+    "היי, אני קוזו 👋\nאני מכיר את כל אנשי המקצוע בתחום הפוליטי - יועצים, דוברים, יחצנים - ומחבר אותם למקומות שצריכים אותם.\n\nמי פונה אלינו היום?",
     {
       reply_markup: {
         inline_keyboard: [
@@ -834,7 +834,7 @@ bot.on("message", async (msg) => {
         });
         writeJSON(ACCESS_REQUESTS_FILE, requests);
 
-        await bot.sendMessage(chatId, "תודה! 🙏\nהבקשה שלך נשלחה לצוות אקדמיה B.\nניצור איתך קשר בהקדם.");
+        await bot.sendMessage(chatId, "תודה! 🙏\nהבקשה שלך נשלחה לקוזו.\nניצור איתך קשר בהקדם.");
         delete sessions[chatId];
       }
     }
@@ -855,10 +855,10 @@ bot.on("message", async (msg) => {
   if (session && session.stage === "awaiting_employer_code") {
     if (text.trim() === EMPLOYER_ACCESS_CODE) {
       sessions[chatId] = { ...newSession("employer", session.username), data: {} };
-      await bot.sendMessage(chatId, "קוד אומת ✅\n\nהיי! אני קוזו 👋 העוזר של אקדמיה B.\n\nבואו נתחיל 🙂");
+      await bot.sendMessage(chatId, "קוד אומת ✅\n\nהיי! אני קוזו 👋\n\nבואו נתחיל 🙂");
       await sendStep(chatId, sessions[chatId]);
     } else {
-      await bot.sendMessage(chatId, "קוד שגוי 🙏 פנו לצוות אקדמיה B לקבלת קוד תקין.");
+      await bot.sendMessage(chatId, "קוד שגוי 🙏 פנו לקוזו לקבלת קוד תקין.");
     }
     return;
   }
@@ -872,7 +872,7 @@ bot.on("message", async (msg) => {
     const phone = normalizePhone(text);
 
     sessions[chatId] = { ...newSession("candidate", session.username), phone, data: { phone } };
-    await bot.sendMessage(chatId, "היי! אני קוזו 👋 העוזר של אקדמיה B.\n\nבואו נתחיל 🙂");
+    await bot.sendMessage(chatId, "היי! אני קוזו 👋\n\nבואו נתחיל 🙂");
     await sendStep(chatId, sessions[chatId]);
     return;
   }
@@ -1126,7 +1126,7 @@ async function sendStatus() {
   ).join("\n");
 
   const msg_text =
-    `📊 *סטטוס אקדמיה B*\n` +
+    `📊 *סטטוס קוזו*\n` +
     `━━━━━━━━━━━━━━━━━━\n\n` +
     `👤 *מועמדים*\n` +
     `סה"כ רשומים: ${uniqueCandidateIds.length}\n` +
@@ -1152,4 +1152,4 @@ async function sendExcel() {
 
 
 ensureDataFiles();
-console.log("🟢 AcademiaB bot פועל בטלגרם...");
+console.log("🟢 קוזו bot פועל בטלגרם...");
