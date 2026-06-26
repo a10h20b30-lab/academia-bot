@@ -871,22 +871,9 @@ bot.on("message", async (msg) => {
     }
     const phone = normalizePhone(text);
 
-    if (isApproved(phone)) {
-      sessions[chatId] = { ...newSession("candidate", session.username), phone, data: { phone } };
-      await bot.sendMessage(chatId, "היי! אני קוזו 👋 העוזר של אקדמיה B.\n\nבואו נתחיל 🙂");
-      await sendStep(chatId, sessions[chatId]);
-    } else {
-      sessions[chatId].phone = phone;
-      await bot.sendMessage(
-        chatId,
-        "לצערנו לא ניתן להמשיך כרגע 🙏",
-        {
-          reply_markup: {
-            inline_keyboard: [[{ text: "שלח בקשת הצטרפות", callback_data: "REQUEST_ACCESS" }]],
-          },
-        }
-      );
-    }
+    sessions[chatId] = { ...newSession("candidate", session.username), phone, data: { phone } };
+    await bot.sendMessage(chatId, "היי! אני קוזו 👋 העוזר של אקדמיה B.\n\nבואו נתחיל 🙂");
+    await sendStep(chatId, sessions[chatId]);
     return;
   }
 
