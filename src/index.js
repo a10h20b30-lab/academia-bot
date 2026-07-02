@@ -518,7 +518,7 @@ function newSession(type, username) {
 }
 
 const CANDIDATE_STEPS = [
-  { key: "full_name",         question: "יאללה, נתחיל 🙂 מה השם?",                                                                    type: "text"   },
+  { key: "full_name",         question: "נתחיל, מה השם?",                                                                    type: "text"   },
   { key: "email",             question: "כתובת מייל?",                                                                          type: "email"  },
   { key: "city",              question: "עיר מגורים?",                                                                          type: "text"   },
   { key: "degree",            question: "מה התואר?",                                                                            type: "single", options: [["תואר ראשון", "תואר שני"], ["אין תואר"]] },
@@ -533,22 +533,22 @@ const CANDIDATE_STEPS = [
   { key: "timing",            question: "מתי אתה פנוי להתחיל?",                                                                 type: "single", options: [["מיידי", "בחודש הקרוב"], ["גמיש / פתוח"]] },
   { key: "availability",      question: "מה היקף המשרה המבוקש?",                                                                type: "single", options: [["משרה מלאה", "משרה חלקית"], ["פרילנס", "פתוח לכל הצעה"]] },
   { key: "cv",                question: "קורות חיים 📎\nגם לא מושלמים – ניצור קשר אם יידרשו פרטים נוספים.",                  type: "file"   },
-  { key: "motivation",        question: "מה מביא אותך לקוזו?\nכמה מילים מהלב 🙂",                                   type: "text"   },
+  { key: "motivation",        question: "מה מביא אותך לקוזו?\nכמה מילים מהלב",                                   type: "text"   },
   { key: "has_references",    question: "האם יש לך ממליצים שלשכות יוכלו לפנות אליהם?",                                         type: "single", options: [["כן ✅", "לא ❌"]] },
   { key: "references",        question: "מצוין! ציין שם ונייד של הממליצים (אפשר כמה, מופרדים בשורות)",                         type: "text",   conditional: "has_references=כן ✅" },
-  { key: "declaration",       question: "לידיעה –\nהטופס משמש כמאגר לצורך בחינת חיבורים אפשריים.\nאין בהגשת הפרטים משום התחייבות.", type: "single", options: [["מאשר ✅"]] },
+  { key: "declaration",       question: "רק לידיעה — הפרטים ישמשו אותי לחיבורים בלבד. אין בזה התחייבות מאף צד 🤝", type: "single", options: [["מאשר ✅"]] },
 ];
 
 const EMPLOYER_STEPS = [
   { key: "org_type",             question: "אתם מטעם...?",                                                                       type: "single", options: [["כנסת", "עירייה"], ["משרד יח\"צ / סושיאל", "אחר"]] },
-  { key: "contact_name",         question: "מעולה 🙂 שם ותפקיד?",                                                                type: "text"   },
+  { key: "contact_name",         question: "שם ותפקיד?",                                                                type: "text"   },
   { key: "email",                question: "כתובת מייל?",                                                                        type: "email"  },
   { key: "fields",               question: "מה תחום החיזוק המבוקש?\nאפשר לסמן כמה ולחץ סיום ✓",                              type: "multi",  options: [["ייעוץ פרלמנטרי", "דוברות"], ["סושיאל ורשתות חברתיות", "יועץ פוליטי"], ["עריכת וידאו", "סיום ✓"]] },
   { key: "timing",               question: "מתי נדרש מישהו?",                                                                    type: "single", options: [["מיידי", "בחודש הקרוב"], ["גמיש / פתוח"]] },
   { key: "availability",         question: "מה היקף המשרה המבוקשת?",                                                            type: "single", options: [["משרה מלאה", "משרה חלקית"], ["פרילנס", "פתוח לכל הצעה"]] },
   { key: "experience_importance",question: "כמה חשוב ניסיון קודם בעבודה ציבורית/פרלמנטרית?",                                     type: "single", options: [["חובה מוחלטת", "יתרון משמעותי"], ["לא הכרחי"]] },
-  { key: "notes",                question: "יש דגשים נוספים שחשוב שנדע?\nאפשר לכתוב בחופשיות, גם 'אין' זה תשובה 😊",          type: "text"   },
-  { key: "declaration",          question: "לידיעה –\nהפנייה מיועדת לצורכי היכרות וחיבור מקצועי בלבד,\nואינה מהווה התחייבות מכל סוג.", type: "single", options: [["מאשר ✅"]] },
+  { key: "notes",                question: "יש דגשים נוספים שחשוב שנדע?\nאפשר לכתוב בחופשיות, גם 'אין' זה תשובה",          type: "text"   },
+  { key: "declaration",          question: "רק לידיעה — הפרטים ישמשו לחיבור מקצועי בלבד. אין בזה התחייבות מאף צד 🤝", type: "single", options: [["מאשר ✅"]] },
 ];
 
 // שאלות עדכון למועמד שחוזר מהשהייה
@@ -708,7 +708,7 @@ bot.onText(/\/start/, async (msg) => {
   sessions[chatId] = { stage: "awaiting_type", username: msg.from.username || "" };
   await bot.sendMessage(
     chatId,
-    "היי, אני קוזו 🤝\nמכיר את כולם בעולם הפוליטי — יועצים, דוברים, אנשי סושיאל — ויודע בדיוק למי להתחתן עם מי.\n\nאז... מי אתה היום?",
+    "היי, אני קוזו 👋\nמכיר את כולם בכנסת — אבל מחבר רק את המתאימים ביותר.\n\nשנתחיל?",
     {
       reply_markup: {
         inline_keyboard: [
@@ -754,7 +754,7 @@ bot.on("message", async (msg) => {
       exportExcel();
       await bot.sendMessage(
         chatId,
-        "מבין, לפעמים צריך להנשים 🙂\nהפסקתי לחפש בשבילך — כשתחזור, כתוב *החזר אותי לפעילות*",
+        "מבין.\nהפסקתי לחפש בשבילך — כשתחזור, כתוב *החזר אותי לפעילות*",
         { parse_mode: "Markdown" }
       );
       await bot.sendMessage(ADMIN_ID, `⏸ מועמד השהה את עצמו (ID: ${chatId})`);
@@ -769,7 +769,7 @@ bot.on("message", async (msg) => {
         return;
       }
       if (!isPaused(chatId)) {
-        await bot.sendMessage(chatId, "אתה כבר בתוך הרשימה שלי 🙂");
+        await bot.sendMessage(chatId, "אתה כבר בתוך הרשימה שלי");
         return;
       }
       sessions[chatId] = { ...newSession("update", msg.from?.username || ""), stage: "updating" };
@@ -780,7 +780,7 @@ bot.on("message", async (msg) => {
 
     if (lower.includes("עדכן פרטים")) {
       sessions[chatId] = { ...newSession("update", msg.from?.username || ""), stage: "updating" };
-      await bot.sendMessage(chatId, "בואו נשמור את המידע הכי עדכני שיש 🙂");
+      await bot.sendMessage(chatId, "בואו נשמור את המידע הכי עדכני שיש");
       await sendStep(chatId, sessions[chatId]);
       return;
     }
@@ -955,7 +955,7 @@ bot.on("callback_query", async (query) => {
       username: sessions[chatId]?.username || "",
       answers: {}
     };
-    await bot.sendMessage(chatId, "בכיף 🙂\nכמה שאלות קצרות ונחזור אליך:\n\nמה שמך המלא?");
+    await bot.sendMessage(chatId, "כמה שאלות קצרות ונחזור אליך:\n\nמה שמך המלא?");
     return;
   }
 
@@ -1009,7 +1009,7 @@ bot.on("callback_query", async (query) => {
   if (data.startsWith("REC_YES_")) {
     const candidateId = Number(data.split("_")[2]);
     sessions[chatId] = { stage: "writing_recommendation", candidateId };
-    await bot.sendMessage(chatId, "מעולה 🙂\nכתוב/י בחופשיות — ממליצים טובים עושים את ההבדל:");
+    await bot.sendMessage(chatId, "כתוב/י בחופשיות — ממליצים טובים עושים את ההבדל:");
     return;
   }
 
@@ -1057,7 +1057,7 @@ bot.on("callback_query", async (query) => {
     if (data === "CANDIDATE") {
       // יועץ — צריך לאמת נייד קודם
       sessions[chatId] = { stage: "awaiting_phone", username: session.username, pendingType: "candidate" };
-      await bot.sendMessage(chatId, "מעולה 🙂 שלח לי את הנייד שלך ונתחיל:");
+      await bot.sendMessage(chatId, "שלח לי את הנייד שלך ונתחיל:");
     } else if (data === "EMPLOYER") {
       // לשכה/עירייה — דורשת קוד אישור לפני שמתחילים
       sessions[chatId] = { stage: "awaiting_employer_code", username: session.username };
@@ -1094,7 +1094,7 @@ bot.on("callback_query", async (query) => {
   } else if (step.type === "multi") {
     if (data === "סיום ✓") {
       if (session.multiSelect.length === 0) {
-        await bot.sendMessage(chatId, "בחר לפחות אפשרות אחת לפני שמסיימים 🙂");
+        await bot.sendMessage(chatId, "בחר לפחות אפשרות אחת לפני שמסיימים");
         return;
       }
       session.data[step.key] = session.multiSelect.join(", ");
