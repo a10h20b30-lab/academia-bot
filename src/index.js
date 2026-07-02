@@ -298,19 +298,12 @@ async function autoConnect(candidate, employer) {
     }
   }
 
-  // שלח למועמד את פרטי הלשכה/עירייה
+  // שלח למועמד הודעת עדכון בלבד — ללא פרטי הלשכה
   await bot.sendMessage(
     candidateId,
-    `👋 קוזו מחבר!\n\n` +
-    `🏛 ${ed.org_type || "לשכה"}: ${ed.contact_name || ""}\n` +
-    `נייד: ${ed.phone || ""}\n` +
-    `מייל: ${ed.email || ""}\n\n` +
-    `📋 מה הם מחפשים:\n` +
-    `תחום: ${ed.fields || ""}\n` +
-    `היקף: ${ed.availability || ""}\n` +
-    `מתי: ${ed.timing || ""}\n` +
-    `דגשים: ${ed.notes || ""}\n\n` +
-    `תעדכנו אותי 🤝`,
+    `👋 קוזו עובד בשבילך!\n\n` +
+    `מצאתי גוף שעשוי להתאים לפרופיל שלך — הפרטים שלך הועברו אליהם.\n` +
+    `אם זה יתאים להם, הם ייצרו איתך קשר ישירות 🤝`,
     {
       reply_markup: {
         inline_keyboard: [[
