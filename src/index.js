@@ -13,7 +13,7 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 const ADMIN_ID = 6021652936;
 const ADMIN_PHONE_LINK = "https://wa.me/972548028082"; // לינק ישיר לוואטסאפ של האדמין
-const EMPLOYER_ACCESS_CODE = "kozo8"; // קוד האישור הקבוע ללשכות/עיריות
+const EMPLOYER_ACCESS_CODE = "KOZO8"; // קוד האישור הקבוע ללשכות/עיריות
 const DATA_DIR = path.join(__dirname, "../data");
 const CANDIDATES_FILE      = path.join(DATA_DIR, "candidates.json");
 const EMPLOYERS_FILE       = path.join(DATA_DIR, "employers.json");
