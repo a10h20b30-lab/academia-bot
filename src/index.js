@@ -12,7 +12,7 @@ const bot = new TelegramBot(process.env.TELEGRAM_TOKEN, { polling: true });
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 const ADMIN_ID = 6021652936;
-const ADMIN_PHONE_LINK = "https://wa.me/972548028082"; // לינק ישיר לוואטסאפ של האדמין
+const ADMIN_PHONE_LINK = "https://wa.me/972548028082?text=%D7%94%D7%99%D7%99%20%D7%90%D7%A0%D7%99%20%D7%9E%D7%A2%D7%95%D7%A0%D7%99%D7%99%D7%9F%20%D7%9C%D7%A7%D7%91%D7%9C%20%D7%A7%D7%95%D7%93%20%D7%9Ckozo"; // לינק לוואטסאפ עם הודעה מוכנה
 const EMPLOYER_ACCESS_CODE = "KOZO8"; // קוד האישור הקבוע ללשכות/עיריות
 const DATA_DIR = path.join(__dirname, "../data");
 const CANDIDATES_FILE      = path.join(DATA_DIR, "candidates.json");
