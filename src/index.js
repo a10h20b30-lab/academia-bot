@@ -1115,39 +1115,39 @@ bot.on("callback_query", async (query) => {
 // ── פקודות אדמין בטקסט (טבלה / סטטוס) ──────────────────────────────────────
 
 async function sendStatus() {
-  const candidates = readJSON(CANDIDATES_FILE);
-  const employers  = readJSON(EMPLOYERS_FILE);
-  const paused     = readJSON(PAUSED_FILE);
-  const pending    = loadPendingMatches();
-  const approved   = readJSON(APPROVED_FILE);
-  const matches    = loadMatchesHistory();
+  const candidates    = readJSON(CANDIDATES_FILE);
+  const employers     = readJSON(EMPLOYERS_FILE);
+  const paused        = readJSON(PAUSED_FILE);
+  const pausedEmp     = readJSON(PAUSED_EMPLOYERS_FILE);
+  const matches       = loadMatchesHistory();
+  const archived      = readJSON(ARCHIVE_FILE);
 
-  const uniqueCandidateIds = [...new Set(candidates.map((c) => c.telegram_id))];
-  const uniqueEmployerIds  = [...new Set(employers.map((e) => e.telegram_id))];
-  const pausedIds          = paused.map((p) => p.telegram_id);
-  const activeCount        = uniqueCandidateIds.filter((id) => !pausedIds.includes(id)).length;
+  const pausedCandIds = paused.map((p) => p.telegram_id);
+  const pausedEmpIds  = pausedEmp.map((p) => p.telegram_id);
 
-  const lastCandidates = candidates.slice(-5).reverse().map((c) =>
-    `• ${c.data.full_name || "ללא שם"} | ${c.data.interests || "—"} | ${pausedIds.includes(c.telegram_id) ? "⏸ מושהה" : "✅ פעיל"}`
-  ).join("\n");
+  const uniqueCandIds = [...new Set(candidates.map((c) => c.telegram_id))];
+  const uniqueEmpIds  = [...new Set(employers.map((e) => e.telegram_id))];
 
-  const lastEmployers = employers.slice(-3).reverse().map((e) =>
-    `• ${e.data.contact_name || "ללא שם"} | ${e.data.fields || "—"}`
-  ).join("\n");
+  const activeCands   = uniqueCandIds.filter((id) => !pausedCandIds.includes(id)).length;
+  const pausedCands   = pausedCandIds.length;
+  const activeEmps    = uniqueEmpIds.filter((id) => !pausedEmpIds.includes(id)).length;
+  const pausedEmps    = pausedEmpIds.length;
+
+  const oneWeekAgo    = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  const matchesWeek   = matches.filter((m) => new Date(m.matchedAt) >= oneWeekAgo).length;
 
   const msg_text =
     `📊 *סטטוס קוזו*\n\n` +
-    `👤 *מועמדים*\n` +
-    `סה"כ רשומים: ${uniqueCandidateIds.length}\n` +
-    `פעילים: ${activeCount}\n` +
-    `מושהים: ${pausedIds.length}\n\n` +
-    `🏛 *לשכות*\n` +
-    `סה"כ רשומות: ${uniqueEmployerIds.length}\n\n` +
-    `🔗 *חיבורים שבוצעו*: ${matches.length}\n\n` +
-    `⏳ *ממתינים לאישור*: ${pending.length}\n` +
-    `🔐 *מאושרי גישה*: ${approved.length}\n\n` +
-    `📋 *5 מועמדים אחרונים*:\n${lastCandidates || "אין"}\n\n` +
-    `🏛 *3 לשכות אחרונות*:\n${lastEmployers || "אין"}`;
+    `👤 *יועצים*\n` +
+    `פעילים במאגר: ${activeCands}\n` +
+    `מושהים: ${pausedCands}\n\n` +
+    `🏛 *מגייסים*\n` +
+    `פעילים: ${activeEmps}\n` +
+    `מושהים: ${pausedEmps}\n\n` +
+    `🔗 *חיבורים*\n` +
+    `סה"כ: ${matches.length}\n` +
+    `השבוע: ${matchesWeek}\n\n` +
+    `🎉 *מצאו עבודה*: ${archived.length}`;
 
   await bot.sendMessage(ADMIN_ID, msg_text, { parse_mode: "Markdown" });
 }
