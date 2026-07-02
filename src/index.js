@@ -305,6 +305,11 @@ async function autoConnect(candidate, employer) {
     `🏛 ${ed.org_type || "לשכה"}: ${ed.contact_name || ""}\n` +
     `נייד: ${ed.phone || ""}\n` +
     `מייל: ${ed.email || ""}\n\n` +
+    `📋 מה הם מחפשים:\n` +
+    `תחום: ${ed.fields || ""}\n` +
+    `היקף: ${ed.availability || ""}\n` +
+    `מתי: ${ed.timing || ""}\n` +
+    `דגשים: ${ed.notes || ""}\n\n` +
     `תעדכנו אותי 🤝`,
     {
       reply_markup: {
@@ -435,6 +440,21 @@ function exportExcel() {
       "סטטוס": r.status === "approved" ? "✅ אושר" : r.status === "denied" ? "❌ נדחה" : "⏳ ממתין",
     });
     XLSX.utils.book_append_sheet(wb, makeSheet("בקשות הצטרפות — קוזו", ACCESS_HEADERS, accessRequests.map(fmtA)), "בקשות הצטרפות");
+
+    // גיליון חיבורים
+    const matchesHistory = readJSON(MATCHES_HISTORY_FILE);
+    const MATCHES_HEADERS = ["תאריך", "שם מועמד", "שם לשכה/גוף", "תחומים", "סטטוס"];
+    const fmtM = (m) => {
+      const cand = candidates.find((c) => c.telegram_id === m.candidateId);
+      return {
+        "תאריך": m.matchedAt ? new Date(m.matchedAt).toLocaleString("he-IL") : "",
+        "שם מועמד": m.candidateName || "",
+        "שם לשכה/גוף": m.employerName || "",
+        "תחומים": cand?.data?.interests || "",
+        "סטטוס": m.status === "closed" ? "סגור" : "פעיל",
+      };
+    };
+    XLSX.utils.book_append_sheet(wb, makeSheet("חיבורים — קוזו", MATCHES_HEADERS, matchesHistory.map(fmtM)), "חיבורים");
 
     const outPath = path.join(__dirname, "../טבלה נתונים.xlsx");
     XLSX.writeFile(wb, outPath);
@@ -1111,6 +1131,7 @@ async function sendStatus() {
   const paused     = readJSON(PAUSED_FILE);
   const pending    = loadPendingMatches();
   const approved   = readJSON(APPROVED_FILE);
+  const matches    = loadMatchesHistory();
 
   const uniqueCandidateIds = [...new Set(candidates.map((c) => c.telegram_id))];
   const uniqueEmployerIds  = [...new Set(employers.map((e) => e.telegram_id))];
@@ -1134,6 +1155,7 @@ async function sendStatus() {
     `מושהים: ${pausedIds.length}\n\n` +
     `🏛 *לשכות*\n` +
     `סה"כ רשומות: ${uniqueEmployerIds.length}\n\n` +
+    `🔗 *חיבורים שבוצעו*: ${matches.length}\n\n` +
     `⏳ *ממתינים לאישור*: ${pending.length}\n` +
     `🔐 *מאושרי גישה*: ${approved.length}\n\n` +
     `━━━━━━━━━━━━━━━━━━\n` +
