@@ -263,7 +263,7 @@ function workplaceMatches(candidatePref, orgType) {
 
 // ── חיבור אוטומטי ──────────────────────────────────────────────────────────────
 
-async function autoConnect(candidate, employer) {
+async function autoConnect(candidate, employer, skipCandidateNotification = false) {
   const candidateId = candidate.telegram_id;
   const employerId  = employer.telegram_id;
   const cd = candidate.data;
@@ -298,20 +298,20 @@ async function autoConnect(candidate, employer) {
     }
   }
 
-  // שלח למועמד הודעת עדכון בלבד — ללא פרטי הלשכה
-  await bot.sendMessage(
-    candidateId,
-    `👋 קוזו עובד בשבילך!\n\n` +
-    `מצאתי גוף שעשוי להתאים לפרופיל שלך — הפרטים שלך הועברו אליהם.\n` +
-    `אם זה יתאים להם, הם ייצרו איתך קשר ישירות 🤝`,
-    {
-      reply_markup: {
-        inline_keyboard: [[
-          { text: "הפסק לקבל הצעות מתאימות מסוג זה 🔕", callback_data: `STOP_OFFERS_CANDIDATE_${candidateId}` },
-        ]],
-      },
-    }
-  );
+  // שלח למועמד הודעת עדכון — רק כשמגייס חדש נרשם ומוצא אותו
+  if (!skipCandidateNotification) {
+    await bot.sendMessage(
+      candidateId,
+      `קוזו עדכן גוף מתאים עם הפרופיל שלך. אם יתאים — ייצרו איתך קשר 🤝`,
+      {
+        reply_markup: {
+          inline_keyboard: [[
+            { text: "הפסק לקבל הצעות 🔕", callback_data: `STOP_OFFERS_CANDIDATE_${candidateId}` },
+          ]],
+        },
+      }
+    );
+  }
 
   // עדכון אדמין — לצפייה בלבד
   await bot.sendMessage(
@@ -617,11 +617,6 @@ async function finishSession(chatId, session) {
   saveRecord(session.type, chatId, session.username, session.data);
 
   if (session.type === "candidate") {
-    await bot.sendMessage(
-      chatId,
-      "שמור אצלי 🤝\nיש לי המון לשכות ועיריות שמחפשות בדיוק מה שיש לך.\nברגע שתהיה התאמה — אחבר אתכם.\n\nבינתיים, אפשר תמיד:\n• *השהה אותי* – להפסיק זמנית\n• *עדכן פרטים* – לרענן את הפרופיל",
-      { parse_mode: "Markdown" }
-    );
     await bot.sendMessage(ADMIN_ID, `📥 מועמד חדש נרשם!\n\n${formatRecord("candidate", session)}`);
 
     // שלח לאדמין טקסט מוכן לשליחה לדובר (אם יש)
@@ -643,17 +638,20 @@ async function finishSession(chatId, session) {
 
     // חפש לשכות קיימות שמתאימות — חיבור אוטומטי
     const newCandidate = readJSON(CANDIDATES_FILE).find((c) => c.telegram_id === chatId);
-    if (newCandidate) {
-      const matchingEmployers = findMatchingEmployers(newCandidate);
-      for (const employer of matchingEmployers) {
-        await autoConnect(newCandidate, employer);
-      }
-      if (matchingEmployers.length > 0) {
-        await bot.sendMessage(
-          chatId,
-          `👋 יש לי ${matchingEmployers.length} לשכות שנראות לי מתאימות — שלחתי להן את הפרטים שלך 🤝`
-        );
-      }
+    const matchingEmployers = newCandidate ? findMatchingEmployers(newCandidate) : [];
+    for (const employer of matchingEmployers) {
+      await autoConnect(newCandidate, employer, true);
+    }
+    if (matchingEmployers.length > 0) {
+      await bot.sendMessage(
+        chatId,
+        `👋 קוזו עובד בשבילך!\n\nמצאתי ${matchingEmployers.length} גופים שעשויים להתאים לפרופיל שלך — הפרטים שלך הועברו אליהם.\nאם זה יתאים להם, הם ייצרו איתך קשר ישירות 🤝`
+      );
+    } else {
+      await bot.sendMessage(
+        chatId,
+        `👋 קוזו כאן!\nהפרופיל שלך נשמר במאגר. ברגע שתהיה התאמה מתאימה — תשמע ממני 🤝`
+      );
     }
   } else {
     await bot.sendMessage(
