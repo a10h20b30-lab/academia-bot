@@ -627,12 +627,10 @@ async function finishSession(chatId, session) {
         `👤 ${session.data.internship_mentor}\n` +
         `📱 ${session.data.internship_phone}\n\n` +
         `*טקסט מוכן לשליחה בוואטסאפ:*\n` +
-        `━━━━━━━━━━━━━━━━━━\n` +
         `שלום, אני קוזו.\n` +
         `${session.data.full_name} שהתמחה אצלך ציין אותך בפרופיל שלו/ה.\n` +
         `אם תרצה/י להמליץ עליו/ה — פתח/י את הבוט כאן:\n` +
-        `t.me/academiaB_advisor_bot\n` +
-        `━━━━━━━━━━━━━━━━━━`;
+        `t.me/academiaB_advisor_bot`;
       await bot.sendMessage(ADMIN_ID, mentorMsg, { parse_mode: "Markdown" });
     }
 
@@ -1138,8 +1136,7 @@ async function sendStatus() {
   ).join("\n");
 
   const msg_text =
-    `📊 *סטטוס קוזו*\n` +
-    `━━━━━━━━━━━━━━━━━━\n\n` +
+    `📊 *סטטוס קוזו*\n\n` +
     `👤 *מועמדים*\n` +
     `סה"כ רשומים: ${uniqueCandidateIds.length}\n` +
     `פעילים: ${activeCount}\n` +
@@ -1149,7 +1146,6 @@ async function sendStatus() {
     `🔗 *חיבורים שבוצעו*: ${matches.length}\n\n` +
     `⏳ *ממתינים לאישור*: ${pending.length}\n` +
     `🔐 *מאושרי גישה*: ${approved.length}\n\n` +
-    `━━━━━━━━━━━━━━━━━━\n` +
     `📋 *5 מועמדים אחרונים*:\n${lastCandidates || "אין"}\n\n` +
     `🏛 *3 לשכות אחרונות*:\n${lastEmployers || "אין"}`;
 
