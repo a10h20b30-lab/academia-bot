@@ -233,7 +233,7 @@ function scheduleFollowUp(candidateId, employerId) {
 
     await bot.sendMessage(
       ADMIN_ID,
-      `📊 מעקב חיבור — שבוע עבר
+      `📊 מעקב חיבור, שבוע עבר
 
 ` +
       `👤 מועמד: ${match.candidateName}
@@ -276,7 +276,7 @@ async function autoConnect(candidate, employer, skipCandidateNotification = fals
     `שם: ${cd.full_name || ""}\n` +
     `נייד: ${cd.phone || ""}\n` +
     `מייל: ${cd.email || ""}\n` +
-    `תואר: ${cd.degree || ""} — ${cd.field_of_study || ""}\n` +
+    `תואר: ${cd.degree || ""}, ${cd.field_of_study || ""}\n` +
     `ניסיון: ${cd.experience || ""}\n` +
     (getRecommendation(candidateId) ? `\n⭐ המלצה: "${getRecommendation(candidateId).text}"\n` : "") +
     (cd.references ? `\n📋 ממליצים: ${cd.references}\n` : "") +
@@ -302,7 +302,7 @@ async function autoConnect(candidate, employer, skipCandidateNotification = fals
   if (!skipCandidateNotification) {
     await bot.sendMessage(
       candidateId,
-      `קוזו עדכן גוף מתאים עם הפרופיל שלך. אם יתאים — ייצרו איתך קשר 🤝`,
+      `קוזו עדכן גוף מתאים עם הפרופיל שלך. אם יתאים, ייצרו איתך קשר 🤝`,
       {
         reply_markup: {
           inline_keyboard: [[
@@ -527,16 +527,16 @@ const CANDIDATE_STEPS = [
   { key: "is_intern",         question: "האם עברת התמחות בכנסת?",                                                               type: "single", options: [["כן ✅", "לא ❌"]] },
   { key: "internship_mentor", question: "אצל מי התמחית? (שם הדובר/ת וועדה)",                                                   type: "text",   conditional: "is_intern=כן ✅" },
   { key: "internship_phone",  question: "מה מספר הנייד שלו/ה?",                                                                 type: "text",   conditional: "is_intern=כן ✅" },
-  { key: "experience",        question: "ספר לנו על הניסיון המקצועי שלך – מה הדרך עד כה?",                                    type: "text"   },
+  { key: "experience",        question: "ספר לנו על הניסיון המקצועי שלך. מה הדרך עד כה?",                                    type: "text"   },
   { key: "interests",         question: "באילו תחומים יש התמחות או עניין?\nאפשר לסמן כמה ולחץ סיום ✓",                      type: "multi",  options: [["ייעוץ פרלמנטרי", "דוברות"], ["סושיאל ורשתות חברתיות", "יועץ פוליטי"], ["עריכת וידאו", "סיום ✓"]] },
   { key: "workplace_pref",    question: "איפה אתה מעדיף לעבוד?",                                                                type: "single", options: [["כנסת", "עירייה"], ["שניהם"]] },
   { key: "timing",            question: "מתי אתה פנוי להתחיל?",                                                                 type: "single", options: [["מיידי", "בחודש הקרוב"], ["גמיש / פתוח"]] },
   { key: "availability",      question: "מה היקף המשרה המבוקש?",                                                                type: "single", options: [["משרה מלאה", "משרה חלקית"], ["פרילנס", "פתוח לכל הצעה"]] },
-  { key: "cv",                question: "קורות חיים 📎\nגם לא מושלמים – ניצור קשר אם יידרשו פרטים נוספים.",                  type: "file"   },
+  { key: "cv",                question: "קורות חיים 📎\nגם לא מושלמים, ניצור קשר אם יידרשו פרטים נוספים.",                  type: "file"   },
   { key: "motivation",        question: "מה מביא אותך לקוזו?\nכמה מילים מהלב",                                   type: "text"   },
   { key: "has_references",    question: "האם יש לך ממליצים שלשכות יוכלו לפנות אליהם?",                                         type: "single", options: [["כן ✅", "לא ❌"]] },
   { key: "references",        question: "מצוין! ציין שם ונייד של הממליצים (אפשר כמה, מופרדים בשורות)",                         type: "text",   conditional: "has_references=כן ✅" },
-  { key: "declaration",       question: "רק לידיעה — הפרטים ישמשו אותי לחיבורים בלבד. אין בזה התחייבות מאף צד 🤝", type: "single", options: [["מאשר ✅"]] },
+  { key: "declaration",       question: "רק לידיעה. הפרטים ישמשו אותי לחיבורים בלבד. אין בזה התחייבות מאף צד 🤝", type: "single", options: [["מאשר ✅"]] },
 ];
 
 const EMPLOYER_STEPS = [
@@ -548,7 +548,7 @@ const EMPLOYER_STEPS = [
   { key: "availability",         question: "מה היקף המשרה המבוקשת?",                                                            type: "single", options: [["משרה מלאה", "משרה חלקית"], ["פרילנס", "פתוח לכל הצעה"]] },
   { key: "experience_importance",question: "כמה חשוב ניסיון קודם בעבודה ציבורית/פרלמנטרית?",                                     type: "single", options: [["חובה מוחלטת", "יתרון משמעותי"], ["לא הכרחי"]] },
   { key: "notes",                question: "יש דגשים נוספים שחשוב שנדע?\nאפשר לכתוב בחופשיות, גם 'אין' זה תשובה",          type: "text"   },
-  { key: "declaration",          question: "רק לידיעה — הפרטים ישמשו לחיבור מקצועי בלבד. אין בזה התחייבות מאף צד 🤝", type: "single", options: [["מאשר ✅"]] },
+  { key: "declaration",          question: "רק לידיעה. הפרטים ישמשו לחיבור מקצועי בלבד. אין בזה התחייבות מאף צד 🤝", type: "single", options: [["מאשר ✅"]] },
 ];
 
 // שאלות עדכון למועמד שחוזר מהשהייה
@@ -608,7 +608,7 @@ async function finishSession(chatId, session) {
     updateCandidateRecord(chatId, session.data);
     resumeCandidate(chatId);
     exportExcel();
-    await bot.sendMessage(chatId, "מעודכן! 🤝\nחזרת לרשימה — ברגע שיהיה התאמה, אחבר.");
+    await bot.sendMessage(chatId, "מעודכן! 🤝\nחזרת לרשימה. ברגע שתהיה התאמה, אחבר.");
     await bot.sendMessage(ADMIN_ID, `🔄 מועמד חזר לפעילות (ID: ${chatId})\n${JSON.stringify(session.data, null, 2)}`);
     delete sessions[chatId];
     return;
@@ -629,7 +629,7 @@ async function finishSession(chatId, session) {
         `*טקסט מוכן לשליחה בוואטסאפ:*\n` +
         `שלום, אני קוזו.\n` +
         `${session.data.full_name} שהתמחה אצלך ציין אותך בפרופיל שלו/ה.\n` +
-        `אם תרצה/י להמליץ עליו/ה — פתח/י את הבוט כאן:\n` +
+        `אם תרצה/י להמליץ עליו/ה, פתח/י את הבוט כאן:\n` +
         `t.me/academiaB_advisor_bot`;
       await bot.sendMessage(ADMIN_ID, mentorMsg, { parse_mode: "Markdown" });
     }
@@ -643,18 +643,18 @@ async function finishSession(chatId, session) {
     if (matchingEmployers.length > 0) {
       await bot.sendMessage(
         chatId,
-        `👋 קוזו עובד בשבילך!\n\nמצאתי ${matchingEmployers.length} גופים שעשויים להתאים לפרופיל שלך — הפרטים שלך הועברו אליהם.\nאם זה יתאים להם, הם ייצרו איתך קשר ישירות 🤝`
+        `👋 קוזו עובד בשבילך!\n\nמצאתי ${matchingEmployers.length} גופים שעשויים להתאים לפרופיל שלך. הפרטים שלך הועברו אליהם.\nאם זה יתאים להם, הם ייצרו איתך קשר ישירות 🤝`
       );
     } else {
       await bot.sendMessage(
         chatId,
-        `👋 קוזו כאן!\nהפרופיל שלך נשמר במאגר. ברגע שתהיה התאמה מתאימה — תשמע ממני 🤝`
+        `👋 קוזו כאן!\nהפרופיל שלך נשמר במאגר. ברגע שתהיה התאמה, תשמע ממני 🤝`
       );
     }
   } else {
     await bot.sendMessage(
       chatId,
-      "נרשם 🤝\nיש לי אנשים שיכולים להתאים — ברגע שנמצא את הנכון, אחבר.\n\nקוזו"
+      "נרשם 🤝\nיש לי אנשים שיכולים להתאים. ברגע שנמצא את הנכון, אחבר.\n\nקוזו"
     );
     await bot.sendMessage(ADMIN_ID, `📥 לשכה חדשה נרשמה!\n\n${formatRecord("employer", session)}`);
 
@@ -665,7 +665,7 @@ async function finishSession(chatId, session) {
       await autoConnect(match, newEmployer || { data: session.data, telegram_id: chatId });
     }
     if (matches.length > 0) {
-      await bot.sendMessage(chatId, `👋 יש לי ${matches.length} אנשים שנראים לי מדויקים בשבילכם — שלחתי להם את הפרטים שלכם 🤝`);
+      await bot.sendMessage(chatId, `👋 יש לי ${matches.length} אנשים שנראים לי מדויקים בשבילכם. שלחתי להם את הפרטים שלכם 🤝`);
     }
   }
   exportExcel();
@@ -690,7 +690,7 @@ bot.onText(/\/start/, async (msg) => {
     sessions[chatId] = { stage: "awaiting_recommendation", candidateId: waitingForRec.telegram_id, candidateName: waitingForRec.data.full_name };
     await bot.sendMessage(
       chatId,
-      `שלום! 👋\n${waitingForRec.data.full_name} הזכיר אותך כמי שהשפיע עליו/ה.\nכמה מילים ממך יכולות לעשות הבדל — תרצה/י להמליץ?`,
+      `שלום! 👋\n${waitingForRec.data.full_name} הזכיר אותך כמי שהשפיע עליו/ה.\nכמה מילים ממך יכולות לעשות הבדל. תרצה/י להמליץ?`,
       {
         reply_markup: {
           inline_keyboard: [[
@@ -741,8 +741,8 @@ bot.on("message", async (msg) => {
     if (lower.includes("מצאתי עבודה")) {
       archiveCandidate(chatId);
       exportExcel();
-      await bot.sendMessage(chatId, "כיף לשמוע, מזל טוב! 🎉\nהרשומה שלך עוברת לארכיון הכבוד.\nאם יום אחד תרצה לחזור — /start תמיד פתוח 😊");
-      await bot.sendMessage(ADMIN_ID, `📦 מועמד הועבר לארכיון (ID: ${chatId}) — מצא עבודה`);
+      await bot.sendMessage(chatId, "כיף לשמוע, מזל טוב! 🎉\nהרשומה שלך עוברת לארכיון הכבוד.\nאם יום אחד תרצה לחזור, /start תמיד פתוח 😊");
+      await bot.sendMessage(ADMIN_ID, `📦 מועמד הועבר לארכיון (ID: ${chatId}), מצא עבודה`);
       delete sessions[chatId];
       return;
     }
@@ -752,7 +752,7 @@ bot.on("message", async (msg) => {
       exportExcel();
       await bot.sendMessage(
         chatId,
-        "מבין.\nהפסקתי לחפש בשבילך — כשתחזור, כתוב *החזר אותי לפעילות*",
+        "מבין.\nהפסקתי לחפש בשבילך. כשתחזור, כתוב *החזר אותי לפעילות*",
         { parse_mode: "Markdown" }
       );
       await bot.sendMessage(ADMIN_ID, `⏸ מועמד השהה את עצמו (ID: ${chatId})`);
@@ -763,7 +763,7 @@ bot.on("message", async (msg) => {
     if (lower.includes("החזר אותי לפעילות")) {
       if (isEmployerPaused(chatId)) {
         resumeEmployer(chatId);
-        await bot.sendMessage(chatId, "שמח שחזרתם 🤝\nאחזיר אתכם לרשימה — ברגע שיהיה מישהו מתאים, אחבר.");
+        await bot.sendMessage(chatId, "שמח שחזרתם 🤝\nאחזיר אתכם לרשימה. ברגע שיהיה מישהו מתאים, אחבר.");
         return;
       }
       if (!isPaused(chatId)) {
@@ -854,7 +854,7 @@ bot.on("message", async (msg) => {
   if (session && session.stage === "writing_recommendation") {
     const rec = text;
     saveRecommendationText(session.candidateId, rec, "ממליץ");
-    await bot.sendMessage(chatId, "תודה רבה! 🙏\nשמרתי את ההמלצה — היא תצורף לפרופיל ותגיע למקום הנכון 🤝");
+    await bot.sendMessage(chatId, "תודה רבה! 🙏\nשמרתי את ההמלצה. היא תצורף לפרופיל ותגיע למקום הנכון 🤝");
     await bot.sendMessage(ADMIN_ID, `⭐ התקבלה המלצה על מועמד ID: ${session.candidateId}\n\n"${rec}"`);
     delete sessions[chatId];
     return;
@@ -867,7 +867,7 @@ bot.on("message", async (msg) => {
       await bot.sendMessage(chatId, "קוד אומת ✅\n\nהיי, אני קוזו 🤝\nבואו נכניס אתכם למאגר ונתחיל לחבר:");
       await sendStep(chatId, sessions[chatId]);
     } else {
-      await bot.sendMessage(chatId, "הקוד לא מוכר לי 🙏 לקבלת קוד תקין — פנו אלינו ישירות.");
+      await bot.sendMessage(chatId, "הקוד לא מוכר לי 🙏 לקבלת קוד תקין, פנו אלינו ישירות.");
     }
     return;
   }
@@ -988,7 +988,7 @@ bot.on("callback_query", async (query) => {
   if (data.startsWith("STOP_OFFERS_EMPLOYER_")) {
     const employerId = Number(data.replace("STOP_OFFERS_EMPLOYER_", ""));
     pauseEmployer(employerId);
-    await bot.sendMessage(chatId, "הבנתי 🙏 הורדתי אתכם מהרשימה.\nכשתהיו מוכנים לחזור — כתבו *החזר אותי לפעילות*", { parse_mode: "Markdown" });
+    await bot.sendMessage(chatId, "הבנתי 🙏 הורדתי אתכם מהרשימה.\nכשתהיו מוכנים לחזור, כתבו *החזר אותי לפעילות*", { parse_mode: "Markdown" });
     await bot.sendMessage(ADMIN_ID, `⏸ לשכה/עירייה הפסיקה לקבל הצעות (ID: ${employerId})`);
     return;
   }
@@ -998,7 +998,7 @@ bot.on("callback_query", async (query) => {
     const candidateId = Number(data.replace("STOP_OFFERS_CANDIDATE_", ""));
     pauseCandidate(candidateId);
     exportExcel();
-    await bot.sendMessage(chatId, "הבנתי 🙏 הורדתי אותך מהרשימה.\nכשתהיה מוכן לחזור — כתוב *החזר אותי לפעילות*", { parse_mode: "Markdown" });
+    await bot.sendMessage(chatId, "הבנתי 🙏 הורדתי אותך מהרשימה.\nכשתהיה מוכן לחזור, כתוב *החזר אותי לפעילות*", { parse_mode: "Markdown" });
     await bot.sendMessage(ADMIN_ID, `⏸ מועמד הפסיק לקבל הצעות (ID: ${candidateId})`);
     return;
   }
@@ -1007,7 +1007,7 @@ bot.on("callback_query", async (query) => {
   if (data.startsWith("REC_YES_")) {
     const candidateId = Number(data.split("_")[2]);
     sessions[chatId] = { stage: "writing_recommendation", candidateId };
-    await bot.sendMessage(chatId, "כתוב/י בחופשיות — ממליצים טובים עושים את ההבדל:");
+    await bot.sendMessage(chatId, "כתוב/י בחופשיות. ממליצים טובים עושים את ההבדל:");
     return;
   }
 
@@ -1022,7 +1022,7 @@ bot.on("callback_query", async (query) => {
     const parts = data.split("_");
     const candidateId = Number(parts[2]);
     const employerId  = Number(parts[3]);
-    await bot.sendMessage(ADMIN_ID, "✅ נרשם — החיבור עדיין פעיל. נבדוק שוב בשבוע הבא.");
+    await bot.sendMessage(ADMIN_ID, "✅ נרשם. החיבור עדיין פעיל. נבדוק שוב בשבוע הבא.");
     // שלח follow-up נוסף בעוד שבוע
     scheduleFollowUp(candidateId, employerId);
     return;
@@ -1043,7 +1043,7 @@ bot.on("callback_query", async (query) => {
       saveMatchesHistory(history);
       exportExcel();
     }
-    await bot.sendMessage(ADMIN_ID, "❌ נרשם — החיבור נסגר. המועמד לא יוצע לאותה לשכה שוב.");
+    await bot.sendMessage(ADMIN_ID, "❌ נרשם. החיבור נסגר. המועמד לא יוצע לאותה לשכה שוב.");
     return;
   }
 
