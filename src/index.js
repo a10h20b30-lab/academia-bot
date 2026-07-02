@@ -706,7 +706,7 @@ bot.onText(/\/start/, async (msg) => {
   sessions[chatId] = { stage: "awaiting_type", username: msg.from.username || "" };
   await bot.sendMessage(
     chatId,
-    "היי, אני קוזו 👋\nמכיר את כולם בכנסת — אבל מחבר רק את המתאימים ביותר.\n\nשנתחיל?",
+    "היי, אני קוזו 👋\nמכיר את כולם אבל מחבר רק את המתאימים ביותר.\n\nשנתחיל?",
     {
       reply_markup: {
         inline_keyboard: [
