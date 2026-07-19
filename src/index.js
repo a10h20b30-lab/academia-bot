@@ -507,7 +507,7 @@ async function claudeChat(chatId, userMessage) {
     return reply;
   } catch (e) {
     console.error("Claude error:", e.message);
-    return "מצטער, יש תקלה זמנית. נסה שוב עוד רגע 🙏";
+    return "מצטער, יש תקלה זמנית. נסה שוב עוד רגע 🙏\nלפניה ישירה: wa.me/972548028082";
   }
 }
 
@@ -869,7 +869,7 @@ bot.on("message", async (msg) => {
       await bot.sendMessage(chatId, "קוד אומת ✅\n\nהיי, אני קוזו 🤝\nבואו נכניס אתכם למאגר ונתחיל לחבר:");
       await sendStep(chatId, sessions[chatId]);
     } else {
-      await bot.sendMessage(chatId, "הקוד לא מוכר לי 🙏 לקבלת קוד תקין, פנו אלינו ישירות.");
+      await bot.sendMessage(chatId, "הקוד לא מוכר לי 🙏 לקבלת קוד תקין, פנו אלינו ישירות.\nלפניה ישירה: wa.me/972548028082");
     }
     return;
   }
@@ -877,7 +877,7 @@ bot.on("message", async (msg) => {
   // ── אימות נייד (יועצים בלבד) ──
   if (session && session.stage === "awaiting_phone") {
     if (!isValidPhone(text)) {
-      await bot.sendMessage(chatId, "הנייד לא עובד לי 🙏 אפשר לנסות שוב?");
+      await bot.sendMessage(chatId, "הנייד לא עובד לי 🙏 אפשר לנסות שוב?\nלפניה ישירה: wa.me/972548028082");
       return;
     }
     const phone = normalizePhone(text);
@@ -888,7 +888,10 @@ bot.on("message", async (msg) => {
     return;
   }
 
-  if (session.stage === "awaiting_type") return;
+  if (session.stage === "awaiting_type") {
+    await bot.sendMessage(chatId, "לא הבנתי 🙏 אפשר להתחיל עם /start\nלעזרה ישירה: wa.me/972548028082");
+    return;
+  }
   if (!session.verified && session.stage !== "updating") return;
 
   const steps = getSteps(session.type);
@@ -901,7 +904,7 @@ bot.on("message", async (msg) => {
     await sendStep(chatId, session);
   } else if (step.type === "email") {
     if (!isValidEmail(text)) {
-      await bot.sendMessage(chatId, "המייל לא נראה תקין 🙏\nלדוגמה: name@gmail.com");
+      await bot.sendMessage(chatId, "המייל לא נראה תקין 🙏\nלדוגמה: name@gmail.com\nלפניה ישירה: wa.me/972548028082");
       return;
     }
     session.data[step.key] = text;
@@ -981,7 +984,7 @@ bot.on("callback_query", async (query) => {
     const reqsDeny = readJSON(ACCESS_REQUESTS_FILE);
     const reqDeny = reqsDeny.find((r) => String(r.telegram_id) === String(targetChatId));
     if (reqDeny) { reqDeny.status = "denied"; reqDeny.denied_at = new Date().toISOString(); writeJSON(ACCESS_REQUESTS_FILE, reqsDeny); }
-    await bot.sendMessage(Number(targetChatId), "מצטערים, הפעם לא הצלחנו לאשר 🙏");
+    await bot.sendMessage(Number(targetChatId), "מצטערים, הפעם לא הצלחנו לאשר 🙏\nלפניה ישירה: wa.me/972548028082");
     await bot.sendMessage(ADMIN_ID, "❌ הבקשה נדחתה.");
     return;
   }
