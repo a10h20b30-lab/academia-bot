@@ -304,7 +304,7 @@ async function autoConnect(candidate, employer, skipCandidateNotification = fals
   if (!skipCandidateNotification) {
     await bot.sendMessage(
       candidateId,
-      `קוזו עדכן גוף מתאים עם הפרופיל שלך. אם יתאים, ייצרו איתך קשר 🤝`,
+      `העברתי את הפרטים שלך ללשכה/גוף חדש שנרשם ונראה לי מתאים. אם יתאים — ייצרו איתך קשר 🤝`,
       {
         reply_markup: {
           inline_keyboard: [[
