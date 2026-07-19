@@ -529,10 +529,10 @@ const CANDIDATE_STEPS = [
   { key: "is_intern",         question: "האם עברת התמחות בכנסת?",                                                               type: "single", options: [["כן ✅", "לא ❌"]] },
   { key: "internship_mentor", question: "אצל מי התמחית? (שם הדובר/ת וועדה)",                                                   type: "text",   conditional: "is_intern=כן ✅" },
   { key: "internship_phone",  question: "מה מספר הנייד שלו/ה?",                                                                 type: "text",   conditional: "is_intern=כן ✅" },
-  { key: "experience",        question: "ספר לי על הדרך שלך עד כה",                                    type: "text"   },
+  { key: "experience",        question: "נשמח לשמוע על הדרך שלך עד כה",                                    type: "text"   },
   { key: "interests",         question: "באילו תחומים יש התמחות או עניין?\nאפשר לסמן כמה ולחץ סיום ✓",                      type: "multi",  options: [["ייעוץ פרלמנטרי", "דוברות"], ["סושיאל ורשתות חברתיות", "יועץ פוליטי"], ["עריכת וידאו", "סיום ✓"]] },
-  { key: "workplace_pref",    question: "איפה אתה מעדיף לעבוד?",                                                                type: "single", options: [["כנסת", "עירייה"], ["שניהם"]] },
-  { key: "timing",            question: "מתי אתה פנוי להתחיל?",                                                                 type: "single", options: [["מיידי", "בחודש הקרוב"], ["גמיש / פתוח"]] },
+  { key: "workplace_pref",    question: "איפה מעדיפים לעבוד?",                                                                type: "single", options: [["כנסת", "עירייה"], ["שניהם"]] },
+  { key: "timing",            question: "מתי פנוי להתחיל?",                                                                 type: "single", options: [["מיידי", "בחודש הקרוב"], ["גמיש / פתוח"]] },
   { key: "availability",      question: "מה היקף המשרה המבוקש?",                                                                type: "single", options: [["משרה מלאה", "משרה חלקית"], ["פרילנס", "פתוח לכל הצעה"]] },
   { key: "cv",                question: "קורות חיים 📎\nגם לא מושלמים, ניצור קשר אם יידרשו פרטים נוספים.",                  type: "file"   },
   { key: "motivation",        question: "מה מביא אותך לקוזו?\nכמה מילים מהלב",                                   type: "text"   },
@@ -556,8 +556,8 @@ const EMPLOYER_STEPS = [
 // שאלות עדכון למועמד שחוזר מהשהייה
 const UPDATE_STEPS = [
   { key: "experience",   question: "מה הניסיון המעודכן שלך מאז הרישום האחרון?",                                               type: "text"   },
-  { key: "interests",    question: "באילו תחומים אתה מעוניין כיום?\nאפשר לסמן כמה ולחץ סיום ✓",                             type: "multi",  options: [["ייעוץ פרלמנטרי", "דוברות"], ["סושיאל ורשתות חברתיות", "יועץ פוליטי"], ["עריכת וידאו", "סיום ✓"]] },
-  { key: "timing",       question: "מתי אתה פנוי להתחיל?",                                                                      type: "single", options: [["מיידי", "בחודש הקרוב"], ["גמיש / פתוח"]] },
+  { key: "interests",    question: "באילו תחומים מעוניינים כיום?\nאפשר לסמן כמה ולחץ סיום ✓",                             type: "multi",  options: [["ייעוץ פרלמנטרי", "דוברות"], ["סושיאל ורשתות חברתיות", "יועץ פוליטי"], ["עריכת וידאו", "סיום ✓"]] },
+  { key: "timing",       question: "מתי פנוי להתחיל?",                                                                      type: "single", options: [["מיידי", "בחודש הקרוב"], ["גמיש / פתוח"]] },
   { key: "availability", question: "מה היקף המשרה המבוקש?",                                                                    type: "single", options: [["משרה מלאה", "משרה חלקית"], ["פרילנס", "פתוח לכל הצעה"]] },
 ];
 
@@ -650,7 +650,7 @@ async function finishSession(chatId, session) {
     } else {
       await bot.sendMessage(
         chatId,
-        `👋 קוזו כאן!\nהפרופיל שלך נשמר במאגר. ברגע שתהיה התאמה, תשמע ממני 🤝`
+        `👋 קוזו כאן!\nהפרופיל שלך נשמר במאגר. ברגע שתהיה התאמה, תשמעו ממני 🤝`
       );
     }
   } else {
@@ -743,7 +743,7 @@ bot.on("message", async (msg) => {
     if (lower.includes("מצאתי עבודה")) {
       archiveCandidate(chatId);
       exportExcel();
-      await bot.sendMessage(chatId, "כיף לשמוע! 🎉 אם יום אחד תרצה לחזור — /start תמיד פתוח");
+      await bot.sendMessage(chatId, "כיף לשמוע! 🎉 אם יום אחד תרצו לחזור — /start תמיד פתוח");
       await bot.sendMessage(ADMIN_ID, `📦 מועמד הועבר לארכיון (ID: ${chatId}), מצא עבודה`);
       delete sessions[chatId];
       return;
@@ -754,7 +754,7 @@ bot.on("message", async (msg) => {
       exportExcel();
       await bot.sendMessage(
         chatId,
-        "מבין.\nעצרתי. כשתרצה לחזור — כתוב *החזר אותי לפעילות*",
+        "הבנתי.\nעצרתי. כשתרצו לחזור — כתבו *החזר אותי לפעילות*",
         { parse_mode: "Markdown" }
       );
       await bot.sendMessage(ADMIN_ID, `⏸ מועמד השהה את עצמו (ID: ${chatId})`);
@@ -769,11 +769,11 @@ bot.on("message", async (msg) => {
         return;
       }
       if (!isPaused(chatId)) {
-        await bot.sendMessage(chatId, "אתה כבר בתוך הרשימה שלי");
+        await bot.sendMessage(chatId, "כבר ברשימה שלי");
         return;
       }
       sessions[chatId] = { ...newSession("update", msg.from?.username || ""), stage: "updating" };
-      await bot.sendMessage(chatId, "שמח שחזרת 🤝\nרק כמה עדכונים קצרים ואחזיר אותך לרשימה:");
+      await bot.sendMessage(chatId, "כיף שחזרת 🤝\nרק כמה עדכונים קצרים ואחזיר אותך לרשימה:");
       await sendStep(chatId, sessions[chatId]);
       return;
     }
@@ -798,7 +798,7 @@ bot.on("message", async (msg) => {
     const ACCESS_QUESTIONS = [
       { key: "full_name",   q: "מה שמך המלא?" },
       { key: "role",        q: "מה תחום העיסוק שלך?" },
-      { key: "job_search",  q: "באיזה תפקיד אתה מחפש?" },
+      { key: "job_search",  q: "איזה תפקיד מחפשים?" },
       { key: "heard_from",  q: "איך שמעת על קוזו?" },
     ];
 
@@ -1000,7 +1000,7 @@ bot.on("callback_query", async (query) => {
     const candidateId = Number(data.replace("STOP_OFFERS_CANDIDATE_", ""));
     pauseCandidate(candidateId);
     exportExcel();
-    await bot.sendMessage(chatId, "הבנתי 🙏 הורדתי אותך מהרשימה.\nכשתהיה מוכן לחזור, כתוב *החזר אותי לפעילות*", { parse_mode: "Markdown" });
+    await bot.sendMessage(chatId, "הבנתי 🙏 הורדתי אותך מהרשימה.\nכשתהיו מוכנים לחזור, כתבו *החזר אותי לפעילות*", { parse_mode: "Markdown" });
     await bot.sendMessage(ADMIN_ID, `⏸ מועמד הפסיק לקבל הצעות (ID: ${candidateId})`);
     return;
   }
