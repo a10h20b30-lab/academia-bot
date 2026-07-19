@@ -620,6 +620,13 @@ async function finishSession(chatId, session) {
 
   if (session.type === "candidate") {
     await bot.sendMessage(ADMIN_ID, `📥 מועמד חדש נרשם!\n\n${formatRecord("candidate", session)}`);
+    if (session.data.cv) {
+      if (session.data.cv.startsWith("file_id:")) {
+        await bot.sendDocument(ADMIN_ID, session.data.cv.replace("file_id:", ""), {}, { caption: "קורות חיים" });
+      } else if (session.data.cv.startsWith("photo_id:")) {
+        await bot.sendPhoto(ADMIN_ID, session.data.cv.replace("photo_id:", ""), { caption: "קורות חיים" });
+      }
+    }
 
     // שלח לאדמין טקסט מוכן לשליחה לדובר (אם יש)
     if (session.data.internship_mentor && session.data.internship_phone) {
