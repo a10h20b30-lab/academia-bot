@@ -645,7 +645,7 @@ async function finishSession(chatId, session) {
     if (matchingEmployers.length > 0) {
       await bot.sendMessage(
         chatId,
-        `👋 קוזו עובד בשבילך!\n\nמצאתי ${matchingEmployers.length} גופים שעשויים להתאים לפרופיל שלך. הפרטים שלך הועברו אליהם.\nאם זה יתאים להם, הם ייצרו איתך קשר ישירות 🤝`
+        `👋 קוזו עובד בשבילך!\n\nהעברתי את הפרטים שלך ל-${matchingEmployers.length} לשכות/גופים שנראים לי מתאימים.\nאם יתאים — ייצרו איתך קשר 🤝`
       );
     } else {
       await bot.sendMessage(
