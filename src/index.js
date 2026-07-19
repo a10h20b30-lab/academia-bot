@@ -270,15 +270,17 @@ async function autoConnect(candidate, employer, skipCandidateNotification = fals
   const ed = employer.data;
 
   // שלח ללשכה/עירייה את פרטי המועמד
+  const degreeStr = [cd.degree, cd.field_of_study].filter(Boolean).join(", ");
+  const rec = getRecommendation(candidateId);
   await bot.sendMessage(
     employerId,
     `👋 מצאתי מישהו שאתם חייבים להכיר!\n\n` +
     `שם: ${cd.full_name || ""}\n` +
     `נייד: ${cd.phone || ""}\n` +
     `מייל: ${cd.email || ""}\n` +
-    `תואר: ${cd.degree || ""}, ${cd.field_of_study || ""}\n` +
+    (degreeStr ? `תואר: ${degreeStr}\n` : "") +
     `ניסיון: ${cd.experience || ""}\n` +
-    (getRecommendation(candidateId) ? `\n⭐ המלצה: "${getRecommendation(candidateId).text}"\n` : "") +
+    (rec ? `\n⭐ המלצה: "${rec.text}"\n` : "") +
     (cd.references ? `\n📋 ממליצים: ${cd.references}\n` : "") +
     `\nתעדכנו אותי איך יצא 🤝`,
     {
