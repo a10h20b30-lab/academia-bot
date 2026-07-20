@@ -1,10 +1,10 @@
 import "dotenv/config";
 import TelegramBot from "node-telegram-bot-api";
 import Anthropic from "@anthropic-ai/sdk";
-import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import * as XLSX from "xlsx";
+import { query, initDB } from "./db.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -14,146 +14,133 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const ADMIN_ID = 6021652936;
 const ADMIN_PHONE_LINK = "https://wa.me/972548028082?text=%D7%94%D7%99%D7%99%20%D7%90%D7%A0%D7%99%20%D7%9E%D7%A2%D7%95%D7%A0%D7%99%D7%99%D7%9F%20%D7%9C%D7%A7%D7%91%D7%9C%20%D7%A7%D7%95%D7%93%20%D7%9Ckozo"; // לינק לוואטסאפ עם הודעה מוכנה
 const EMPLOYER_ACCESS_CODE = "KOZO8"; // קוד האישור הקבוע ללשכות/עיריות
-const DATA_DIR = path.join(__dirname, "../data");
-const CANDIDATES_FILE      = path.join(DATA_DIR, "candidates.json");
-const EMPLOYERS_FILE       = path.join(DATA_DIR, "employers.json");
-const APPROVED_FILE        = path.join(DATA_DIR, "approved_phones.json");
-const PENDING_MATCHES_FILE = path.join(DATA_DIR, "pending_matches.json");
-const PAUSED_FILE          = path.join(DATA_DIR, "paused_candidates.json");
-const PAUSED_EMPLOYERS_FILE = path.join(DATA_DIR, "paused_employers.json");
-const MATCHES_HISTORY_FILE   = path.join(DATA_DIR, "matches_history.json");
-const RECOMMENDATIONS_FILE   = path.join(DATA_DIR, "recommendations.json");
-const ARCHIVE_FILE           = path.join(DATA_DIR, "archive.json");
-const ACCESS_REQUESTS_FILE   = path.join(DATA_DIR, "access_requests.json");
-
-// ── קבצים ────────────────────────────────────────────────────────────────────
-
-function ensureDataFiles() {
-  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-  if (!fs.existsSync(CANDIDATES_FILE))      fs.writeFileSync(CANDIDATES_FILE,      "[]");
-  if (!fs.existsSync(EMPLOYERS_FILE))       fs.writeFileSync(EMPLOYERS_FILE,       "[]");
-  if (!fs.existsSync(APPROVED_FILE))        fs.writeFileSync(APPROVED_FILE,        "[]");
-  if (!fs.existsSync(PENDING_MATCHES_FILE)) fs.writeFileSync(PENDING_MATCHES_FILE, "[]");
-  if (!fs.existsSync(PAUSED_FILE))          fs.writeFileSync(PAUSED_FILE,          "[]");
-  if (!fs.existsSync(PAUSED_EMPLOYERS_FILE)) fs.writeFileSync(PAUSED_EMPLOYERS_FILE, "[]");
-  if (!fs.existsSync(MATCHES_HISTORY_FILE))   fs.writeFileSync(MATCHES_HISTORY_FILE,   "[]");
-  if (!fs.existsSync(RECOMMENDATIONS_FILE))  fs.writeFileSync(RECOMMENDATIONS_FILE,  "[]");
-  if (!fs.existsSync(ARCHIVE_FILE))          fs.writeFileSync(ARCHIVE_FILE,          "[]");
-  if (!fs.existsSync(ACCESS_REQUESTS_FILE))  fs.writeFileSync(ACCESS_REQUESTS_FILE,  "[]");
-}
-
-function readJSON(file) {
-  try { return JSON.parse(fs.readFileSync(file, "utf-8")); }
-  catch { return []; }
-}
-
-function writeJSON(file, data) {
-  fs.writeFileSync(file, JSON.stringify(data, null, 2));
-}
-
-
 
 // ── ארכיון ───────────────────────────────────────────────────────────────────
 
-function archiveCandidate(telegramId) {
-  const candidates = readJSON(CANDIDATES_FILE);
-  const candidate = [...candidates].reverse().find((c) => c.telegram_id === telegramId);
-  if (!candidate) return;
-
-  const archive = readJSON(ARCHIVE_FILE);
-  archive.push({ ...candidate, archived_at: new Date().toISOString() });
-  writeJSON(ARCHIVE_FILE, archive);
-
-  // הסר מהמאגר הפעיל והשהייה
-  writeJSON(CANDIDATES_FILE, candidates.filter((c) => c.telegram_id !== telegramId));
-  writeJSON(PAUSED_FILE, readJSON(PAUSED_FILE).filter((p) => p.telegram_id !== telegramId));
+async function archiveCandidate(telegramId) {
+  await query(
+    `UPDATE candidates SET status='archived' WHERE telegram_id=$1`,
+    [telegramId]
+  );
 }
 
 // ── המלצות ───────────────────────────────────────────────────────────────────
 
-function loadRecommendations() { return readJSON(RECOMMENDATIONS_FILE); }
-function saveRecommendations(list) { writeJSON(RECOMMENDATIONS_FILE, list); }
-
-function getRecommendation(candidateId) {
-  return loadRecommendations().find((r) => r.candidateId === candidateId) || null;
+async function getRecommendation(candidateId) {
+  const res = await query(
+    `SELECT * FROM recommendations WHERE candidate_id=$1`,
+    [candidateId]
+  );
+  return res.rows[0] || null;
 }
 
-function saveRecommendationText(candidateId, text, recommenderName) {
-  const list = loadRecommendations().filter((r) => r.candidateId !== candidateId);
-  list.push({ candidateId, text, recommenderName, createdAt: new Date().toISOString() });
-  saveRecommendations(list);
+async function saveRecommendationText(candidateId, text, recommenderName) {
+  await query(
+    `INSERT INTO recommendations (candidate_id, text, recommender_name)
+     VALUES ($1, $2, $3)
+     ON CONFLICT (candidate_id) DO UPDATE SET text=$2, recommender_name=$3`,
+    [candidateId, text, recommenderName]
+  );
 }
 
 // ── השהייה ────────────────────────────────────────────────────────────────────
 
-function isPaused(telegramId) {
-  return readJSON(PAUSED_FILE).some((p) => p.telegram_id === telegramId);
-}
-
-function pauseCandidate(telegramId) {
-  const list = readJSON(PAUSED_FILE).filter((p) => p.telegram_id !== telegramId);
-  list.push({ telegram_id: telegramId, paused_at: new Date().toISOString() });
-  writeJSON(PAUSED_FILE, list);
-}
-
-function resumeCandidate(telegramId) {
-  writeJSON(PAUSED_FILE, readJSON(PAUSED_FILE).filter((p) => p.telegram_id !== telegramId));
-}
-
-function isEmployerPaused(telegramId) {
-  return readJSON(PAUSED_EMPLOYERS_FILE).some((p) => p.telegram_id === telegramId);
-}
-
-function pauseEmployer(telegramId) {
-  const list = readJSON(PAUSED_EMPLOYERS_FILE).filter((p) => p.telegram_id !== telegramId);
-  list.push({ telegram_id: telegramId, paused_at: new Date().toISOString() });
-  writeJSON(PAUSED_EMPLOYERS_FILE, list);
-}
-
-function resumeEmployer(telegramId) {
-  writeJSON(PAUSED_EMPLOYERS_FILE, readJSON(PAUSED_EMPLOYERS_FILE).filter((p) => p.telegram_id !== telegramId));
-}
-
-function getCandidateRecord(telegramId) {
-  const all = readJSON(CANDIDATES_FILE);
-  // מחזיר את הרשומה האחרונה של המועמד
-  return [...all].reverse().find((c) => c.telegram_id === telegramId) || null;
-}
-
-function updateCandidateRecord(telegramId, updates) {
-  const all = readJSON(CANDIDATES_FILE);
-  // עדכון הרשומה האחרונה
-  let updated = false;
-  for (let i = all.length - 1; i >= 0; i--) {
-    if (all[i].telegram_id === telegramId) {
-      all[i].data = { ...all[i].data, ...updates };
-      all[i].updated_at = new Date().toISOString();
-      updated = true;
-      break;
-    }
-  }
-  if (updated) writeJSON(CANDIDATES_FILE, all);
-}
-
-// ── Pending matches ────────────────────────────────────────────────────────────
-
-function loadPendingMatches() { return readJSON(PENDING_MATCHES_FILE); }
-
-function savePendingMatches(list) { writeJSON(PENDING_MATCHES_FILE, list); }
-
-function addPendingMatch(candidateId, employerId) {
-  const list = loadPendingMatches().filter(
-    (m) => !(m.candidateId === candidateId && m.employerId === employerId)
+async function isPaused(telegramId) {
+  const res = await query(
+    `SELECT 1 FROM candidates WHERE telegram_id=$1 AND status='paused'`,
+    [telegramId]
   );
-  list.push({ candidateId, employerId, timestamp: new Date().toISOString() });
-  savePendingMatches(list);
+  return res.rows.length > 0;
 }
 
-function removePendingMatch(candidateId, employerId) {
-  savePendingMatches(
-    loadPendingMatches().filter(
-      (m) => !(m.candidateId === candidateId && m.employerId === employerId)
-    )
+async function pauseCandidate(telegramId) {
+  await query(
+    `UPDATE candidates SET status='paused' WHERE telegram_id=$1 AND status='active'`,
+    [telegramId]
+  );
+}
+
+async function resumeCandidate(telegramId) {
+  await query(
+    `UPDATE candidates SET status='active' WHERE telegram_id=$1 AND status='paused'`,
+    [telegramId]
+  );
+}
+
+async function isEmployerPaused(telegramId) {
+  const res = await query(
+    `SELECT 1 FROM employers WHERE telegram_id=$1 AND status='paused'`,
+    [telegramId]
+  );
+  return res.rows.length > 0;
+}
+
+async function pauseEmployer(telegramId) {
+  await query(
+    `UPDATE employers SET status='paused' WHERE telegram_id=$1`,
+    [telegramId]
+  );
+}
+
+async function resumeEmployer(telegramId) {
+  await query(
+    `UPDATE employers SET status='active' WHERE telegram_id=$1`,
+    [telegramId]
+  );
+}
+
+async function getCandidateRecord(telegramId) {
+  const res = await query(
+    `SELECT * FROM candidates WHERE telegram_id=$1 ORDER BY created_at DESC LIMIT 1`,
+    [telegramId]
+  );
+  return res.rows[0] || null;
+}
+
+async function getEmployerRecord(telegramId) {
+  const res = await query(
+    `SELECT * FROM employers WHERE telegram_id=$1 ORDER BY created_at DESC LIMIT 1`,
+    [telegramId]
+  );
+  return res.rows[0] || null;
+}
+
+async function updateCandidateRecord(telegramId, updates) {
+  const ALLOWED_COLUMNS = [
+    "full_name", "phone", "email", "city", "degree", "field_of_study",
+    "languages", "is_intern", "internship_mentor", "internship_phone",
+    "experience", "interests", "workplace_pref", "timing", "availability",
+    "cv", "motivation", "has_references", "references", "declaration", "status"
+  ];
+  const keys = Object.keys(updates).filter((k) => ALLOWED_COLUMNS.includes(k));
+  if (keys.length === 0) return;
+
+  const setClauses = keys.map((k, i) => `${k}=$${i + 2}`).join(", ");
+  const values = keys.map((k) => updates[k]);
+  await query(
+    `UPDATE candidates SET ${setClauses}, updated_at=NOW()
+     WHERE telegram_id=$1
+     AND id=(SELECT id FROM candidates WHERE telegram_id=$1 ORDER BY created_at DESC LIMIT 1)`,
+    [telegramId, ...values]
+  );
+}
+
+// ── היסטוריית חיבורים ────────────────────────────────────────────────────────
+
+async function hasBeenMatched(candidateId, employerId) {
+  const res = await query(
+    `SELECT 1 FROM matches WHERE candidate_id=$1 AND employer_id=$2`,
+    [candidateId, employerId]
+  );
+  return res.rows.length > 0;
+}
+
+async function recordMatch(candidateId, employerId, candidateName, employerName) {
+  await query(
+    `INSERT INTO matches (candidate_id, employer_id, candidate_name, employer_name)
+     VALUES ($1, $2, $3, $4)
+     ON CONFLICT (candidate_id, employer_id) DO NOTHING`,
+    [candidateId, employerId, candidateName, employerName]
   );
 }
 
@@ -163,72 +150,84 @@ function normalizePhone(phone) { return phone.replace(/\D/g, ""); }
 function isValidPhone(phone)   { return normalizePhone(phone).length >= 9; }
 function isValidEmail(email)   { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email); }
 
-function isApproved(phone) {
-  return readJSON(APPROVED_FILE).includes(normalizePhone(phone));
+async function isApproved(phone) {
+  const res = await query(
+    `SELECT 1 FROM approved_phones WHERE phone=$1`,
+    [normalizePhone(phone)]
+  );
+  return res.rows.length > 0;
 }
 
-function approvePhone(phone) {
-  const list = readJSON(APPROVED_FILE);
-  const normalized = normalizePhone(phone);
-  if (!list.includes(normalized)) {
-    list.push(normalized);
-    writeJSON(APPROVED_FILE, list);
-  }
+async function approvePhone(phone) {
+  await query(
+    `INSERT INTO approved_phones (phone) VALUES ($1) ON CONFLICT DO NOTHING`,
+    [normalizePhone(phone)]
+  );
 }
 
 // ── שמירת רשומות ──────────────────────────────────────────────────────────────
 
-function saveRecord(type, chatId, username, data) {
-  const file = type === "candidate" ? CANDIDATES_FILE : EMPLOYERS_FILE;
-  const records = readJSON(file);
-  records.push({
-    timestamp: new Date().toISOString(),
-    type,
-    telegram_id: chatId,
-    telegram_username: username || "",
-    data,
-  });
-  writeJSON(file, records);
-  console.log(`נשמר: ${type} | ${username || chatId}`);
-}
-
-
-// ── היסטוריית חיבורים ────────────────────────────────────────────────────────
-
-function loadMatchesHistory() { return readJSON(MATCHES_HISTORY_FILE); }
-
-function saveMatchesHistory(list) { writeJSON(MATCHES_HISTORY_FILE, list); }
-
-function hasBeenMatched(candidateId, employerId) {
-  return loadMatchesHistory().some(
-    (m) => m.candidateId === candidateId && m.employerId === employerId
-  );
-}
-
-function recordMatch(candidateId, employerId, candidateName, employerName) {
-  const history = loadMatchesHistory();
-  if (!hasBeenMatched(candidateId, employerId)) {
-    history.push({
-      candidateId,
-      employerId,
-      candidateName,
-      employerName,
-      matchedAt: new Date().toISOString(),
-      status: "active",
-      followUpSent: false,
-    });
-    saveMatchesHistory(history);
+async function saveRecord(type, chatId, username, data) {
+  if (type === "candidate") {
+    await query(
+      `INSERT INTO candidates (
+        telegram_id, telegram_username,
+        full_name, phone, email, city, degree, field_of_study,
+        languages, is_intern, internship_mentor, internship_phone,
+        experience, interests, workplace_pref, timing, availability,
+        cv, motivation, has_references, "references", declaration
+      ) VALUES (
+        $1, $2,
+        $3, $4, $5, $6, $7, $8,
+        $9, $10, $11, $12,
+        $13, $14, $15, $16, $17,
+        $18, $19, $20, $21, $22
+      )`,
+      [
+        chatId, username || "",
+        data.full_name || "", data.phone || "", data.email || "",
+        data.city || "", data.degree || "", data.field_of_study || "",
+        data.languages || "", data.is_intern || "", data.internship_mentor || "",
+        data.internship_phone || "", data.experience || "", data.interests || "",
+        data.workplace_pref || "", data.timing || "", data.availability || "",
+        data.cv || "", data.motivation || "", data.has_references || "",
+        data.references || "", data.declaration || "",
+      ]
+    );
+  } else {
+    await query(
+      `INSERT INTO employers (
+        telegram_id, telegram_username,
+        org_type, contact_name, phone, email,
+        fields, timing, availability, experience_importance,
+        notes, declaration
+      ) VALUES (
+        $1, $2,
+        $3, $4, $5, $6,
+        $7, $8, $9, $10,
+        $11, $12
+      )`,
+      [
+        chatId, username || "",
+        data.org_type || "", data.contact_name || "", data.phone || "",
+        data.email || "", data.fields || "", data.timing || "",
+        data.availability || "", data.experience_importance || "",
+        data.notes || "", data.declaration || "",
+      ]
+    );
   }
+  console.log(`נשמר: ${type} | ${username || chatId}`);
 }
 
 function scheduleFollowUp(candidateId, employerId) {
   // שולח follow-up אחרי 7 ימים
   const delay = 7 * 24 * 60 * 60 * 1000; // 7 ימים במילישניות
   setTimeout(async () => {
-    const history = loadMatchesHistory();
-    const match = history.find(
-      (m) => m.candidateId === candidateId && m.employerId === employerId && m.status === "active"
+    const res = await query(
+      `SELECT * FROM matches WHERE candidate_id=$1 AND employer_id=$2 AND status='active'`,
+      [candidateId, employerId]
     );
+    const match = res.rows[0];
     if (!match) return; // כבר טופל
 
     await bot.sendMessage(
@@ -236,9 +235,9 @@ function scheduleFollowUp(candidateId, employerId) {
       `📊 מעקב חיבור, שבוע עבר
 
 ` +
-      `👤 מועמד: ${match.candidateName}
+      `👤 מועמד: ${match.candidate_name}
 ` +
-      `🏛 לשכה: ${match.employerName}
+      `🏛 לשכה: ${match.employer_name}
 
 ` +
       `האם החיבור עדיין בתהליך?`,
@@ -266,12 +265,12 @@ function workplaceMatches(candidatePref, orgType) {
 async function autoConnect(candidate, employer, skipCandidateNotification = false) {
   const candidateId = candidate.telegram_id;
   const employerId  = employer.telegram_id;
-  const cd = candidate.data;
-  const ed = employer.data;
+  const cd = candidate;
+  const ed = employer;
 
   // שלח ללשכה/עירייה את פרטי המועמד
   const degreeStr = [cd.degree, cd.field_of_study].filter(Boolean).join(", ");
-  const rec = getRecommendation(candidateId);
+  const rec = await getRecommendation(candidateId);
   await bot.sendMessage(
     employerId,
     `יש מישהו שנראה לי מדויק בשבילכם 👋\n\n` +
@@ -324,82 +323,88 @@ async function autoConnect(candidate, employer, skipCandidateNotification = fals
     `תחומים: ${cd.interests || ""}`
   );
 
-  recordMatch(candidateId, employerId, cd.full_name || "מועמד", ed.contact_name || "לשכה");
+  await recordMatch(candidateId, employerId, cd.full_name || "מועמד", ed.contact_name || "לשכה");
   scheduleFollowUp(candidateId, employerId);
 }
 
-function findMatches(employer) {
-  const candidates = readJSON(CANDIDATES_FILE);
-  const fields = (employer.data.fields || "").split(", ");
-  const paused = readJSON(PAUSED_FILE).map((p) => p.telegram_id);
-  return candidates.filter((c) => {
-    if (paused.includes(c.telegram_id)) return false;
-    if (hasBeenMatched(c.telegram_id, employer.telegram_id)) return false;
-    if (!workplaceMatches(c.data.workplace_pref, employer.data.org_type)) return false;
-    const interests = (c.data.interests || "").split(", ");
-    return fields.some((f) => interests.some((i) => i.trim() === f.trim()));
-  });
+async function findMatches(employer) {
+  const res = await query(`SELECT * FROM candidates WHERE status='active'`);
+  const candidates = res.rows;
+  const fields = (employer.fields || "").split(", ");
+  const filtered = [];
+  for (const c of candidates) {
+    if (await hasBeenMatched(c.telegram_id, employer.telegram_id)) continue;
+    if (!workplaceMatches(c.workplace_pref, employer.org_type)) continue;
+    const interests = (c.interests || "").split(", ");
+    if (fields.some((f) => interests.some((i) => i.trim() === f.trim()))) {
+      filtered.push(c);
+    }
+  }
+  return filtered;
 }
 
 // מציאת לשכות מתאימות למועמד חדש
-function findMatchingEmployers(candidate) {
-  const employers = readJSON(EMPLOYERS_FILE);
-  const pausedEmployers = readJSON(PAUSED_EMPLOYERS_FILE).map((p) => p.telegram_id);
-  const interests = (candidate.data.interests || "").split(", ").map((i) => i.trim());
-  return employers.filter((e) => {
-    if (pausedEmployers.includes(e.telegram_id)) return false;
-    if (hasBeenMatched(candidate.telegram_id, e.telegram_id)) return false;
-    if (!workplaceMatches(candidate.data.workplace_pref, e.data.org_type)) return false;
-    const fields = (e.data.fields || "").split(", ").map((f) => f.trim());
-    return fields.some((f) => interests.includes(f));
-  });
+async function findMatchingEmployers(candidate) {
+  const res = await query(`SELECT * FROM employers WHERE status='active'`);
+  const employers = res.rows;
+  const interests = (candidate.interests || "").split(", ").map((i) => i.trim());
+  const filtered = [];
+  for (const e of employers) {
+    if (await hasBeenMatched(candidate.telegram_id, e.telegram_id)) continue;
+    if (!workplaceMatches(candidate.workplace_pref, e.org_type)) continue;
+    const fields = (e.fields || "").split(", ").map((f) => f.trim());
+    if (fields.some((f) => interests.includes(f))) {
+      filtered.push(e);
+    }
+  }
+  return filtered;
 }
 
 // ── Excel ─────────────────────────────────────────────────────────────────────
 
-function exportExcel() {
+async function exportExcel() {
   try {
-    const candidates = readJSON(CANDIDATES_FILE);
-    const employers  = readJSON(EMPLOYERS_FILE);
+    const [candidatesRes, employersRes, matchesRes, accessRes] = await Promise.all([
+      query(`SELECT * FROM candidates ORDER BY created_at ASC`),
+      query(`SELECT * FROM employers ORDER BY created_at ASC`),
+      query(`SELECT * FROM matches ORDER BY matched_at ASC`),
+      query(`SELECT * FROM access_requests ORDER BY timestamp ASC`),
+    ]);
+    const candidates = candidatesRes.rows;
+    const employers  = employersRes.rows;
+    const matchesHistory = matchesRes.rows;
+    const accessRequests = accessRes.rows;
 
     const CANDIDATE_HEADERS = ["תאריך","טלגרם","שם מלא","נייד","מייל","עיר","תואר","תחום לימודים","שפות","עבר התמחות","ניסיון","תחומי עניין","מקום עבודה מועדף","זמינות","קורות חיים","מוטיבציה","הצהרה","סטטוס","הוצע ל"];
     const EMPLOYER_HEADERS  = ["תאריך","טלגרם","מטעם","שם ותפקיד","נייד","מייל","תחומים","היקף","תזמון","חשיבות ניסיון","הערות","הצהרה","סטטוס"];
 
-    const paused = readJSON(PAUSED_FILE).map((p) => p.telegram_id);
-    const pausedEmployers = readJSON(PAUSED_EMPLOYERS_FILE).map((p) => p.telegram_id);
+    const fmtC = (r) => ({
+      "תאריך": r.timestamp ? new Date(r.timestamp).toLocaleString("he-IL") : "",
+      "טלגרם": r.telegram_username ? `@${r.telegram_username}` : String(r.telegram_id || ""),
+      "שם מלא": r.full_name || "", "נייד": r.phone || "", "מייל": r.email || "",
+      "עיר": r.city || "", "תואר": r.degree || "", "תחום לימודים": r.field_of_study || "",
+      "שפות": r.languages || "", "עבר התמחות": r.is_intern || "",
+      "ניסיון": r.experience || "", "תחומי עניין": r.interests || "",
+      "מקום עבודה מועדף": r.workplace_pref || "",
+      "מועד פנוי": r.timing || "", "זמינות": r.availability || "", "קורות חיים": r.cv || "",
+      "מוטיבציה": r.motivation || "", "הצהרה": r.declaration || "",
+      "סטטוס": r.status === "paused" ? "מושהה" : r.status === "archived" ? "ארכיון" : "פעיל",
+      "הוצע ל": matchesHistory
+        .filter((m) => m.candidate_id === r.telegram_id)
+        .map((m) => m.employer_name + (m.status === "closed" ? " ✗" : " ✓"))
+        .join(", ") || "—",
+    });
 
-    const fmtC = (r) => {
-      const d = r.data || {};
-      return {
-        "תאריך": r.timestamp ? new Date(r.timestamp).toLocaleString("he-IL") : "",
-        "טלגרם": r.telegram_username ? `@${r.telegram_username}` : String(r.telegram_id || ""),
-        "שם מלא": d.full_name || "", "נייד": d.phone || "", "מייל": d.email || "",
-        "עיר": d.city || "", "תואר": d.degree || "", "תחום לימודים": d.field_of_study || "",
-        "שפות": d.languages || "", "עבר התמחות": d.is_intern || "",
-        "ניסיון": d.experience || "", "תחומי עניין": d.interests || "",
-        "מקום עבודה מועדף": d.workplace_pref || "",
-        "מועד פנוי": d.timing || "", "זמינות": d.availability || "", "קורות חיים": d.cv || "",
-        "מוטיבציה": d.motivation || "", "הצהרה": d.declaration || "",
-        "סטטוס": paused.includes(r.telegram_id) ? "מושהה" : "פעיל",
-        "הוצע ל": loadMatchesHistory()
-          .filter((m) => m.candidateId === r.telegram_id)
-          .map((m) => m.employerName + (m.status === "closed" ? " ✗" : " ✓"))
-          .join(", ") || "—",
-      };
-    };
-    const fmtE = (r) => {
-      const d = r.data || {};
-      return {
-        "תאריך": r.timestamp ? new Date(r.timestamp).toLocaleString("he-IL") : "",
-        "טלגרם": r.telegram_username ? `@${r.telegram_username}` : String(r.telegram_id || ""),
-        "מטעם": d.org_type || "",
-        "שם ותפקיד": d.contact_name || "", "נייד": d.phone || "", "מייל": d.email || "",
-        "תחומים": d.fields || "", "מועד": d.timing || "", "היקף": d.availability || "",
-        "חשיבות ניסיון": d.experience_importance || "", "הערות": d.notes || "",
-        "הצהרה": d.declaration || "",
-        "סטטוס": pausedEmployers.includes(r.telegram_id) ? "מושהה" : "פעיל",
-      };
-    };
+    const fmtE = (r) => ({
+      "תאריך": r.timestamp ? new Date(r.timestamp).toLocaleString("he-IL") : "",
+      "טלגרם": r.telegram_username ? `@${r.telegram_username}` : String(r.telegram_id || ""),
+      "מטעם": r.org_type || "",
+      "שם ותפקיד": r.contact_name || "", "נייד": r.phone || "", "מייל": r.email || "",
+      "תחומים": r.fields || "", "מועד": r.timing || "", "היקף": r.availability || "",
+      "חשיבות ניסיון": r.experience_importance || "", "הערות": r.notes || "",
+      "הצהרה": r.declaration || "",
+      "סטטוס": r.status === "paused" ? "מושהה" : "פעיל",
+    });
 
     const makeSheet = (title, headers, rows) => {
       const ws = XLSX.utils.aoa_to_sheet([[title]]);
@@ -414,16 +419,18 @@ function exportExcel() {
       return ws;
     };
 
+    // גיליון ארכיון — מועמדים עם status='archived'
+    const archived = candidates.filter((c) => c.status === "archived");
+    const activeCandidates = candidates.filter((c) => c.status !== "archived");
+
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, makeSheet("רשימת יועצים ודוברים — קוזו", CANDIDATE_HEADERS, candidates.map(fmtC)), "יועצים ודוברים");
+    XLSX.utils.book_append_sheet(wb, makeSheet("רשימת יועצים ודוברים — קוזו", CANDIDATE_HEADERS, activeCandidates.map(fmtC)), "יועצים ודוברים");
     XLSX.utils.book_append_sheet(wb, makeSheet("רשימת לשכות חברי כנסת — קוזו", EMPLOYER_HEADERS, employers.map(fmtE)), "חברי כנסת");
 
     // גיליון ארכיון
-    const archived = readJSON(ARCHIVE_FILE);
     XLSX.utils.book_append_sheet(wb, makeSheet("ארכיון — מצאו עבודה", CANDIDATE_HEADERS, archived.map(fmtC)), "ארכיון");
 
     // גיליון בקשות גישה
-    const accessRequests = readJSON(ACCESS_REQUESTS_FILE);
     const ACCESS_HEADERS = ["תאריך", "שם", "נייד", "תחום", "מחפש", "שמע עלינו", "סטטוס"];
     const fmtA = (r) => ({
       "תאריך": r.timestamp ? new Date(r.timestamp).toLocaleString("he-IL") : "",
@@ -437,15 +444,14 @@ function exportExcel() {
     XLSX.utils.book_append_sheet(wb, makeSheet("בקשות הצטרפות — קוזו", ACCESS_HEADERS, accessRequests.map(fmtA)), "בקשות הצטרפות");
 
     // גיליון חיבורים
-    const matchesHistory = readJSON(MATCHES_HISTORY_FILE);
     const MATCHES_HEADERS = ["תאריך", "שם מועמד", "שם לשכה/גוף", "תחומים", "סטטוס"];
     const fmtM = (m) => {
-      const cand = candidates.find((c) => c.telegram_id === m.candidateId);
+      const cand = candidates.find((c) => c.telegram_id === m.candidate_id);
       return {
-        "תאריך": m.matchedAt ? new Date(m.matchedAt).toLocaleString("he-IL") : "",
-        "שם מועמד": m.candidateName || "",
-        "שם לשכה/גוף": m.employerName || "",
-        "תחומים": cand?.data?.interests || "",
+        "תאריך": m.matched_at ? new Date(m.matched_at).toLocaleString("he-IL") : "",
+        "שם מועמד": m.candidate_name || "",
+        "שם לשכה/גוף": m.employer_name || "",
+        "תחומים": cand?.interests || "",
         "סטטוס": m.status === "closed" ? "סגור" : "פעיל",
       };
     };
@@ -607,16 +613,16 @@ async function sendStep(chatId, session) {
 async function finishSession(chatId, session) {
   if (session.type === "update") {
     // עדכון פרטים ומחזיר לפעילות
-    updateCandidateRecord(chatId, session.data);
-    resumeCandidate(chatId);
-    exportExcel();
+    await updateCandidateRecord(chatId, session.data);
+    await resumeCandidate(chatId);
+    await exportExcel();
     await bot.sendMessage(chatId, "מעודכן! 🤝\nחזרת לרשימה. ברגע שתהיה התאמה, אחבר.");
     await bot.sendMessage(ADMIN_ID, `🔄 מועמד חזר לפעילות (ID: ${chatId})\n${JSON.stringify(session.data, null, 2)}`);
     delete sessions[chatId];
     return;
   }
 
-  saveRecord(session.type, chatId, session.username, session.data);
+  await saveRecord(session.type, chatId, session.username, session.data);
 
   if (session.type === "candidate") {
     await bot.sendMessage(ADMIN_ID, `📥 מועמד חדש נרשם!\n\n${formatRecord("candidate", session)}`);
@@ -644,8 +650,8 @@ async function finishSession(chatId, session) {
     }
 
     // חפש לשכות קיימות שמתאימות — חיבור אוטומטי
-    const newCandidate = readJSON(CANDIDATES_FILE).find((c) => c.telegram_id === chatId);
-    const matchingEmployers = newCandidate ? findMatchingEmployers(newCandidate) : [];
+    const newCandidate = await getCandidateRecord(chatId);
+    const matchingEmployers = newCandidate ? await findMatchingEmployers(newCandidate) : [];
     for (const employer of matchingEmployers) {
       await autoConnect(newCandidate, employer, true);
     }
@@ -668,16 +674,17 @@ async function finishSession(chatId, session) {
     await bot.sendMessage(ADMIN_ID, `📥 לשכה חדשה נרשמה!\n\n${formatRecord("employer", session)}`);
 
     // חיפוש התאמות מיידי — חיבור אוטומטי
-    const newEmployer = readJSON(EMPLOYERS_FILE).find((e) => e.telegram_id === chatId);
-    const matches = findMatches({ data: session.data, telegram_id: chatId });
+    const newEmployer = await getEmployerRecord(chatId);
+    const employerForMatch = newEmployer || { ...session.data, telegram_id: chatId };
+    const matches = await findMatches(employerForMatch);
     for (const match of matches) {
-      await autoConnect(match, newEmployer || { data: session.data, telegram_id: chatId });
+      await autoConnect(match, employerForMatch);
     }
     if (matches.length > 0) {
       await bot.sendMessage(chatId, `👋 יש לי ${matches.length} אנשים שנראים לי מדויקים בשבילכם. שלחתי להם את הפרטים שלכם 🤝`);
     }
   }
-  exportExcel();
+  await exportExcel();
   delete sessions[chatId];
 }
 
@@ -688,23 +695,38 @@ bot.onText(/\/start/, async (msg) => {
   chatHistories[chatId] = [];
 
   // בדוק אם יש מועמד שמחכה להמלצה מהמשתמש הזה
-  const candidates = readJSON(CANDIDATES_FILE);
-  const waitingForRec = candidates.find(
-    (c) => c.data.internship_phone &&
-           normalizePhone(c.data.internship_phone) === String(chatId) &&
-           !getRecommendation(c.telegram_id)
+  const recRes = await query(
+    `SELECT * FROM candidates WHERE internship_phone IS NOT NULL AND internship_phone != '' AND status != 'archived'`
+  );
+  const allCandidates = recRes.rows;
+  const waitingForRec = allCandidates.find(
+    (c) => c.internship_phone &&
+           normalizePhone(c.internship_phone) === String(chatId) &&
+           true // recommendation check is done async below
   );
 
-  if (waitingForRec) {
-    sessions[chatId] = { stage: "awaiting_recommendation", candidateId: waitingForRec.telegram_id, candidateName: waitingForRec.data.full_name };
+  // additional check: no recommendation yet
+  let recCandidate = null;
+  for (const c of allCandidates) {
+    if (normalizePhone(c.internship_phone) === String(chatId)) {
+      const existingRec = await getRecommendation(c.telegram_id);
+      if (!existingRec) {
+        recCandidate = c;
+        break;
+      }
+    }
+  }
+
+  if (recCandidate) {
+    sessions[chatId] = { stage: "awaiting_recommendation", candidateId: recCandidate.telegram_id, candidateName: recCandidate.full_name };
     await bot.sendMessage(
       chatId,
-      `שלום! 👋\n${waitingForRec.data.full_name} הזכיר אותך כמי שהשפיע עליו/ה.\nכמה מילים ממך יכולות לעשות הבדל. תרצה/י להמליץ?`,
+      `שלום! 👋\n${recCandidate.full_name} הזכיר אותך כמי שהשפיע עליו/ה.\nכמה מילים ממך יכולות לעשות הבדל. תרצה/י להמליץ?`,
       {
         reply_markup: {
           inline_keyboard: [[
-            { text: "כן, אשמח להמליץ ✅", callback_data: `REC_YES_${waitingForRec.telegram_id}` },
-            { text: "לא תודה ❌",          callback_data: `REC_NO_${waitingForRec.telegram_id}`  },
+            { text: "כן, אשמח להמליץ ✅", callback_data: `REC_YES_${recCandidate.telegram_id}` },
+            { text: "לא תודה ❌",          callback_data: `REC_NO_${recCandidate.telegram_id}`  },
           ]],
         },
       }
@@ -748,8 +770,8 @@ bot.on("message", async (msg) => {
     const lower = text.toLowerCase();
 
     if (lower.includes("מצאתי עבודה")) {
-      archiveCandidate(chatId);
-      exportExcel();
+      await archiveCandidate(chatId);
+      await exportExcel();
       await bot.sendMessage(chatId, "כיף לשמוע! 🎉 אם יום אחד תרצו לחזור — /start תמיד פתוח");
       await bot.sendMessage(ADMIN_ID, `📦 מועמד הועבר לארכיון (ID: ${chatId}), מצא עבודה`);
       delete sessions[chatId];
@@ -757,8 +779,8 @@ bot.on("message", async (msg) => {
     }
 
     if (lower.includes("השהה אותי")) {
-      pauseCandidate(chatId);
-      exportExcel();
+      await pauseCandidate(chatId);
+      await exportExcel();
       await bot.sendMessage(
         chatId,
         "הבנתי.\nעצרתי. כשתרצו לחזור — כתבו *החזר אותי לפעילות*",
@@ -770,12 +792,12 @@ bot.on("message", async (msg) => {
     }
 
     if (lower.includes("החזר אותי לפעילות")) {
-      if (isEmployerPaused(chatId)) {
-        resumeEmployer(chatId);
+      if (await isEmployerPaused(chatId)) {
+        await resumeEmployer(chatId);
         await bot.sendMessage(chatId, "שמח שחזרתם 🤝\nאחזיר אתכם לרשימה. ברגע שיהיה מישהו מתאים, אחבר.");
         return;
       }
-      if (!isPaused(chatId)) {
+      if (!(await isPaused(chatId))) {
         await bot.sendMessage(chatId, "כבר ברשימה שלי");
         return;
       }
@@ -837,20 +859,12 @@ bot.on("message", async (msg) => {
             },
           }
         );
-        // שמור בקשת גישה
-        const requests = readJSON(ACCESS_REQUESTS_FILE);
-        requests.push({
-          timestamp: new Date().toISOString(),
-          telegram_id: chatId,
-          telegram_username: session.username || "",
-          phone: session.phone,
-          full_name: a.full_name,
-          role: a.role,
-          job_search: a.job_search,
-          heard_from: a.heard_from,
-          status: "pending"
-        });
-        writeJSON(ACCESS_REQUESTS_FILE, requests);
+        // שמור בקשת גישה ב-DB
+        await query(
+          `INSERT INTO access_requests (telegram_id, telegram_username, phone, full_name, role, job_search, heard_from)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          [chatId, session.username || "", session.phone, a.full_name, a.role, a.job_search, a.heard_from]
+        );
 
         await bot.sendMessage(chatId, "שמרתי 🙏\nאחזור אליך בהקדם.");
         delete sessions[chatId];
@@ -862,7 +876,7 @@ bot.on("message", async (msg) => {
   // ── כתיבת המלצה ──
   if (session && session.stage === "writing_recommendation") {
     const rec = text;
-    saveRecommendationText(session.candidateId, rec, "ממליץ");
+    await saveRecommendationText(session.candidateId, rec, "ממליץ");
     await bot.sendMessage(chatId, "תודה רבה! 🙏\nשמרתי את ההמלצה. היא תצורף לפרופיל ותגיע למקום הנכון 🤝");
     await bot.sendMessage(ADMIN_ID, `⭐ התקבלה המלצה על מועמד ID: ${session.candidateId}\n\n"${rec}"`);
     delete sessions[chatId];
@@ -951,10 +965,10 @@ bot.on("photo", async (msg) => {
 
 // ── לחיצות כפתור ─────────────────────────────────────────────────────────────
 
-bot.on("callback_query", async (query) => {
-  const chatId = query.message.chat.id;
-  const data   = query.data;
-  try { await bot.answerCallbackQuery(query.id); } catch (_) {}
+bot.on("callback_query", async (cbQuery) => {
+  const chatId = cbQuery.message.chat.id;
+  const data   = cbQuery.data;
+  try { await bot.answerCallbackQuery(cbQuery.id); } catch (_) {}
 
   // בקשת הצטרפות — התחל שאלון
   if (data === "REQUEST_ACCESS") {
@@ -974,11 +988,12 @@ bot.on("callback_query", async (query) => {
     const parts = data.split("_");
     const targetChatId = parts[2];
     const phone = parts[3];
-    approvePhone(phone);
+    await approvePhone(phone);
     // עדכן סטטוס בקשה
-    const reqs = readJSON(ACCESS_REQUESTS_FILE);
-    const req = reqs.find((r) => String(r.telegram_id) === String(targetChatId));
-    if (req) { req.status = "approved"; req.approved_at = new Date().toISOString(); writeJSON(ACCESS_REQUESTS_FILE, reqs); }
+    await query(
+      `UPDATE access_requests SET status='approved', approved_at=NOW() WHERE telegram_id=$1`,
+      [Number(targetChatId)]
+    );
     await bot.sendMessage(Number(targetChatId), "אושר! 🎉\nשלח /start ונתחיל 🤝");
     await bot.sendMessage(ADMIN_ID, `✅ אושר! נייד ${phone} נוסף לרשימה.`);
     return;
@@ -988,9 +1003,10 @@ bot.on("callback_query", async (query) => {
   if (data.startsWith("DENY_ACCESS_")) {
     const targetChatId = data.split("_")[2];
     // עדכן סטטוס בקשה
-    const reqsDeny = readJSON(ACCESS_REQUESTS_FILE);
-    const reqDeny = reqsDeny.find((r) => String(r.telegram_id) === String(targetChatId));
-    if (reqDeny) { reqDeny.status = "denied"; reqDeny.denied_at = new Date().toISOString(); writeJSON(ACCESS_REQUESTS_FILE, reqsDeny); }
+    await query(
+      `UPDATE access_requests SET status='denied', denied_at=NOW() WHERE telegram_id=$1`,
+      [Number(targetChatId)]
+    );
     await bot.sendMessage(Number(targetChatId), "מצטערים, הפעם לא הצלחנו לאשר 🙏\nלפניה ישירה: wa.me/972548028082");
     await bot.sendMessage(ADMIN_ID, "❌ הבקשה נדחתה.");
     return;
@@ -999,7 +1015,7 @@ bot.on("callback_query", async (query) => {
   // הפסקת הצעות — לשכה/עירייה
   if (data.startsWith("STOP_OFFERS_EMPLOYER_")) {
     const employerId = Number(data.replace("STOP_OFFERS_EMPLOYER_", ""));
-    pauseEmployer(employerId);
+    await pauseEmployer(employerId);
     await bot.sendMessage(chatId, "הבנתי 🙏 הורדתי אתכם מהרשימה.\nכשתהיו מוכנים לחזור, כתבו *החזר אותי לפעילות*", { parse_mode: "Markdown" });
     await bot.sendMessage(ADMIN_ID, `⏸ לשכה/עירייה הפסיקה לקבל הצעות (ID: ${employerId})`);
     return;
@@ -1008,8 +1024,8 @@ bot.on("callback_query", async (query) => {
   // הפסקת הצעות — מועמד
   if (data.startsWith("STOP_OFFERS_CANDIDATE_")) {
     const candidateId = Number(data.replace("STOP_OFFERS_CANDIDATE_", ""));
-    pauseCandidate(candidateId);
-    exportExcel();
+    await pauseCandidate(candidateId);
+    await exportExcel();
     await bot.sendMessage(chatId, "הבנתי 🙏 הורדתי אותך מהרשימה.\nכשתהיו מוכנים לחזור, כתבו *החזר אותי לפעילות*", { parse_mode: "Markdown" });
     await bot.sendMessage(ADMIN_ID, `⏸ מועמד הפסיק לקבל הצעות (ID: ${candidateId})`);
     return;
@@ -1045,16 +1061,11 @@ bot.on("callback_query", async (query) => {
     const candidateId = Number(parts[2]);
     const employerId  = Number(parts[3]);
     // עדכן סטטוס בהיסטוריה
-    const history = loadMatchesHistory();
-    const match = history.find(
-      (m) => m.candidateId === candidateId && m.employerId === employerId
+    await query(
+      `UPDATE matches SET status='closed', closed_at=NOW() WHERE candidate_id=$1 AND employer_id=$2`,
+      [candidateId, employerId]
     );
-    if (match) {
-      match.status = "closed";
-      match.closedAt = new Date().toISOString();
-      saveMatchesHistory(history);
-      exportExcel();
-    }
+    await exportExcel();
     await bot.sendMessage(ADMIN_ID, "❌ נרשם. החיבור נסגר. המועמד לא יוצע לאותה לשכה שוב.");
     return;
   }
@@ -1088,7 +1099,6 @@ bot.on("callback_query", async (query) => {
   }
 
   if (session.stage === "awaiting_employer_code") return;
-
 
   if (!session.verified && session.stage !== "updating") return;
 
@@ -1127,26 +1137,41 @@ bot.on("callback_query", async (query) => {
 // ── פקודות אדמין בטקסט (טבלה / סטטוס) ──────────────────────────────────────
 
 async function sendStatus() {
-  const candidates    = readJSON(CANDIDATES_FILE);
-  const employers     = readJSON(EMPLOYERS_FILE);
-  const paused        = readJSON(PAUSED_FILE);
-  const pausedEmp     = readJSON(PAUSED_EMPLOYERS_FILE);
-  const matches       = loadMatchesHistory();
-  const archived      = readJSON(ARCHIVE_FILE);
+  const [candidatesRes, employersRes, matchesRes, archivedRes] = await Promise.all([
+    query(`SELECT telegram_id, status FROM candidates`),
+    query(`SELECT telegram_id, status FROM employers`),
+    query(`SELECT status, matched_at FROM matches`),
+    query(`SELECT COUNT(*) FROM candidates WHERE status='archived'`),
+  ]);
 
-  const pausedCandIds = paused.map((p) => p.telegram_id);
-  const pausedEmpIds  = pausedEmp.map((p) => p.telegram_id);
+  const candidates = candidatesRes.rows;
+  const employers  = employersRes.rows;
+  const matches    = matchesRes.rows;
+  const archivedCount = Number(archivedRes.rows[0].count);
 
   const uniqueCandIds = [...new Set(candidates.map((c) => c.telegram_id))];
   const uniqueEmpIds  = [...new Set(employers.map((e) => e.telegram_id))];
 
-  const activeCands   = uniqueCandIds.filter((id) => !pausedCandIds.includes(id)).length;
-  const pausedCands   = pausedCandIds.length;
-  const activeEmps    = uniqueEmpIds.filter((id) => !pausedEmpIds.includes(id)).length;
-  const pausedEmps    = pausedEmpIds.length;
+  const activeCands  = uniqueCandIds.filter((id) => {
+    const recs = candidates.filter((c) => c.telegram_id === id);
+    return recs.some((r) => r.status === "active");
+  }).length;
+  const pausedCands  = uniqueCandIds.filter((id) => {
+    const recs = candidates.filter((c) => c.telegram_id === id);
+    return recs.every((r) => r.status === "paused");
+  }).length;
 
-  const oneWeekAgo    = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-  const matchesWeek   = matches.filter((m) => new Date(m.matchedAt) >= oneWeekAgo).length;
+  const activeEmps   = uniqueEmpIds.filter((id) => {
+    const recs = employers.filter((e) => e.telegram_id === id);
+    return recs.some((r) => r.status === "active");
+  }).length;
+  const pausedEmps   = uniqueEmpIds.filter((id) => {
+    const recs = employers.filter((e) => e.telegram_id === id);
+    return recs.every((r) => r.status === "paused");
+  }).length;
+
+  const oneWeekAgo  = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  const matchesWeek = matches.filter((m) => new Date(m.matched_at) >= oneWeekAgo).length;
 
   const msg_text =
     `📊 *סטטוס קוזו*\n\n` +
@@ -1159,18 +1184,20 @@ async function sendStatus() {
     `🔗 *חיבורים*\n` +
     `סה"כ: ${matches.length}\n` +
     `השבוע: ${matchesWeek}\n\n` +
-    `🎉 *מצאו עבודה*: ${archived.length}`;
+    `🎉 *מצאו עבודה*: ${archivedCount}`;
 
   await bot.sendMessage(ADMIN_ID, msg_text, { parse_mode: "Markdown" });
 }
 
 async function sendExcel() {
-  exportExcel();
+  await exportExcel();
   const outPath = path.join(__dirname, "../טבלה נתונים.xlsx");
   await bot.sendDocument(ADMIN_ID, outPath, {}, { caption: "📊 טבלת נתונים מעודכנת" });
 }
 
+// ── אתחול ────────────────────────────────────────────────────────────────────
 
-
-ensureDataFiles();
-console.log("🟢 קוזו bot פועל בטלגרם...");
+(async () => {
+  await initDB();
+  console.log("🟢 קוזו bot פועל בטלגרם...");
+})();
