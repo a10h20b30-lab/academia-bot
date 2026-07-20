@@ -741,8 +741,8 @@ bot.onText(/\/start/, async (msg) => {
     {
       reply_markup: {
         inline_keyboard: [
-          [{ text: "👤 מחפש הזדמנות מקצועית", callback_data: "CANDIDATE" }],
-          [{ text: "🔎 מחפשים איש מקצוע", callback_data: "EMPLOYER" }],
+          [{ text: "מחפש תפקיד 👤", callback_data: "CANDIDATE" }],
+          [{ text: "מחפשים מישהו לתפקיד 🔎", callback_data: "EMPLOYER" }],
         ],
       },
     }
