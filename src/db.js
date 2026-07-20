@@ -81,12 +81,15 @@ export async function initDB() {
       requires_license TEXT,
       english_required TEXT,
       irregular_hours TEXT,
+      future_search TEXT,
       declaration TEXT,
       status TEXT DEFAULT 'active',
       created_at TIMESTAMPTZ DEFAULT NOW(),
       updated_at TIMESTAMPTZ DEFAULT NOW()
     )
   `);
+
+  await query(`ALTER TABLE employers ADD COLUMN IF NOT EXISTS future_search TEXT`);
 
   await query(`
     CREATE TABLE IF NOT EXISTS approved_phones (

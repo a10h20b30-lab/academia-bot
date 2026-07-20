@@ -204,12 +204,12 @@ async function saveRecord(type, chatId, username, data) {
         telegram_id, telegram_username,
         org_type, contact_name, phone, email,
         fields, timing, availability, experience_importance,
-        notes, political_side, requires_license, english_required, irregular_hours, declaration
+        notes, political_side, requires_license, english_required, irregular_hours, future_search, declaration
       ) VALUES (
         $1, $2,
         $3, $4, $5, $6,
         $7, $8, $9, $10,
-        $11, $12, $13, $14, $15, $16
+        $11, $12, $13, $14, $15, $16, $17
       )`,
       [
         chatId, username || "",
@@ -217,7 +217,7 @@ async function saveRecord(type, chatId, username, data) {
         data.email || "", data.fields || "", data.timing || "",
         data.availability || "", data.experience_importance || "",
         data.notes || "", data.political_side || "", data.requires_license || "",
-        data.english_required || "", data.irregular_hours || "", data.declaration || "",
+        data.english_required || "", data.irregular_hours || "", data.future_search || "", data.declaration || "",
       ]
     );
   }
@@ -339,8 +339,16 @@ async function findMatches(employer) {
   const res = await query(`SELECT * FROM candidates WHERE status='active'`);
   const candidates = res.rows;
   const fields = (employer.fields || "").split(", ");
+
+  const rejectedRes = await query(
+    `SELECT candidate_id FROM cv_requests WHERE employer_id=$1 AND status='not_suitable'`,
+    [employer.telegram_id]
+  );
+  const rejectedIds = new Set(rejectedRes.rows.map((r) => r.candidate_id));
+
   const filtered = [];
   for (const c of candidates) {
+    if (rejectedIds.has(c.telegram_id)) continue;
     if (await hasBeenMatched(c.telegram_id, employer.telegram_id)) continue;
     if (!workplaceMatches(c.workplace_pref, employer.org_type)) continue;
     if (!politicalMatches(c.political_side, employer.political_side)) continue;
@@ -355,6 +363,24 @@ async function findMatches(employer) {
 // מציאת לשכות מתאימות למועמד חדש
 async function findMatchingEmployers(candidate) {
   const res = await query(`SELECT * FROM employers WHERE status='active'`);
+  const employers = res.rows;
+  const interests = (candidate.interests || "").split(", ").map((i) => i.trim());
+  const filtered = [];
+  for (const e of employers) {
+    if (await hasBeenMatched(candidate.telegram_id, e.telegram_id)) continue;
+    if (!workplaceMatches(candidate.workplace_pref, e.org_type)) continue;
+    if (!politicalMatches(candidate.political_side, e.political_side)) continue;
+    const fields = (e.fields || "").split(", ").map((f) => f.trim());
+    if (fields.some((f) => interests.includes(f))) {
+      filtered.push(e);
+    }
+  }
+  return filtered;
+}
+
+// לשכות שהסכימו לחיפושים עתידיים (status='paused' + future_search='כן')
+async function findFutureSearchEmployers(candidate) {
+  const res = await query(`SELECT * FROM employers WHERE status='paused' AND future_search='כן'`);
   const employers = res.rows;
   const interests = (candidate.interests || "").split(", ").map((i) => i.trim());
   const filtered = [];
@@ -574,6 +600,7 @@ const EMPLOYER_STEPS = [
   { key: "requires_license",     question: "נדרש רישיון רכב?",                                                              type: "single", options: [["חובה", "יתרון"], ["לא נדרש"]] },
   { key: "english_required",     question: "נדרשת אנגלית?",                                                                 type: "single", options: [["ברמה גבוהה", "בסיסית"], ["לא נדרש"]] },
   { key: "irregular_hours",      question: "נדרשת זמינות לשעות לא שגרתיות?",                                               type: "single", options: [["כן", "לא"]] },
+  { key: "future_search",        question: "האם תרצו להישאר במאגר לחיפושים עתידיים?",                                   type: "single", options: [["כן", "לא"]] },
   { key: "declaration",          question: "רק לידיעה. הפרטים ישמשו לחיבור מקצועי בלבד. אין בזה התחייבות מאף צד 🤝", type: "single", options: [["מאשר ✅"]] },
 ];
 
@@ -671,6 +698,11 @@ async function finishSession(chatId, session) {
     const newCandidate = await getCandidateRecord(chatId);
     const matchingEmployers = newCandidate ? await findMatchingEmployers(newCandidate) : [];
     for (const employer of matchingEmployers) {
+      await sendMatchSummary([newCandidate], employer, false);
+    }
+    // לשכות מושהות שביקשו להישאר לחיפושים עתידיים
+    const futureEmployers = newCandidate ? await findFutureSearchEmployers(newCandidate) : [];
+    for (const employer of futureEmployers) {
       await sendMatchSummary([newCandidate], employer, false);
     }
     if (matchingEmployers.length > 0) {
@@ -775,6 +807,29 @@ bot.on("message", async (msg) => {
   if (chatId === ADMIN_ID) {
     if (text === "טבלה") { await sendExcel(); return; }
     if (text === "סטטוס") { await sendStatus(); return; }
+    if (text === "הודעה") {
+      sessions[chatId] = { stage: "broadcast", step: "audience" };
+      await bot.sendMessage(chatId, "לאיזה קהל?", {
+        reply_markup: { inline_keyboard: [
+          [{ text: "יועצים", callback_data: "BROADCAST_AUDIENCE_candidates" }],
+          [{ text: "מגייסים", callback_data: "BROADCAST_AUDIENCE_employers" }],
+          [{ text: "כולם", callback_data: "BROADCAST_AUDIENCE_all" }],
+        ]},
+      });
+      return;
+    }
+    const adminSession = sessions[chatId];
+    if (adminSession?.stage === "broadcast" && adminSession?.step === "text") {
+      adminSession.message = text;
+      adminSession.step = "whatsapp";
+      await bot.sendMessage(chatId, "להוסיף לינק וואטסאפ?", {
+        reply_markup: { inline_keyboard: [[
+          { text: "כן", callback_data: "BROADCAST_WHATSAPP_yes" },
+          { text: "לא", callback_data: "BROADCAST_WHATSAPP_no" },
+        ]]},
+      });
+      return;
+    }
   }
 
   const session = sessions[chatId];
@@ -1084,6 +1139,76 @@ bot.on("callback_query", async (cbQuery) => {
     return;
   }
 
+  // שידור כללי — אדמין בלבד
+  if (chatId === ADMIN_ID && data.startsWith("BROADCAST_")) {
+    const bs = sessions[chatId];
+    if (!bs || bs.stage !== "broadcast") return;
+
+    if (data.startsWith("BROADCAST_AUDIENCE_")) {
+      bs.audience = data.replace("BROADCAST_AUDIENCE_", "");
+      bs.step = "field";
+      await bot.sendMessage(chatId, "רק תחום מסוים?", {
+        reply_markup: { inline_keyboard: [
+          [{ text: "ייעוץ פרלמנטרי", callback_data: "BROADCAST_FIELD_ייעוץ פרלמנטרי" }],
+          [{ text: "דוברות",          callback_data: "BROADCAST_FIELD_דוברות" }],
+          [{ text: "סושיאל",          callback_data: "BROADCAST_FIELD_סושיאל ורשתות חברתיות" }],
+          [{ text: "יועץ פוליטי",    callback_data: "BROADCAST_FIELD_יועץ פוליטי" }],
+          [{ text: "עריכת וידאו",     callback_data: "BROADCAST_FIELD_עריכת וידאו" }],
+          [{ text: "כולם",            callback_data: "BROADCAST_FIELD_all" }],
+        ]},
+      });
+      return;
+    }
+
+    if (data.startsWith("BROADCAST_FIELD_")) {
+      bs.field = data.replace("BROADCAST_FIELD_", "");
+      bs.step = "political";
+      await bot.sendMessage(chatId, "רק צד פוליטי?", {
+        reply_markup: { inline_keyboard: [
+          [{ text: "קואליציה",  callback_data: "BROADCAST_POLITICAL_קואליציה" }],
+          [{ text: "אופוזיציה", callback_data: "BROADCAST_POLITICAL_אופוזיציה" }],
+          [{ text: "כולם",      callback_data: "BROADCAST_POLITICAL_all" }],
+        ]},
+      });
+      return;
+    }
+
+    if (data.startsWith("BROADCAST_POLITICAL_")) {
+      bs.political = data.replace("BROADCAST_POLITICAL_", "");
+      bs.step = "text";
+      await bot.sendMessage(chatId, "מה ההודעה?");
+      return;
+    }
+
+    if (data.startsWith("BROADCAST_WHATSAPP_")) {
+      bs.addWhatsapp = data.replace("BROADCAST_WHATSAPP_", "") === "yes";
+      bs.step = "confirm";
+      const ids = await getBroadcastRecipients(bs);
+      await bot.sendMessage(chatId, `תשלח ל-${ids.size} אנשים. מאשר?`, {
+        reply_markup: { inline_keyboard: [[
+          { text: "שלח ✅", callback_data: "BROADCAST_SEND" },
+          { text: "בטל ❌",  callback_data: "BROADCAST_CANCEL" },
+        ]]},
+      });
+      return;
+    }
+
+    if (data === "BROADCAST_SEND") {
+      const sent = await sendBroadcast(bs);
+      delete sessions[chatId];
+      await bot.sendMessage(chatId, `ההודעה נשלחה ל-${sent} אנשים ✅`);
+      return;
+    }
+
+    if (data === "BROADCAST_CANCEL") {
+      delete sessions[chatId];
+      await bot.sendMessage(chatId, "בוטל.");
+      return;
+    }
+
+    return;
+  }
+
   // הפסקת הצעות — לשכה/עירייה
   if (data.startsWith("STOP_OFFERS_EMPLOYER_")) {
     const employerId = Number(data.replace("STOP_OFFERS_EMPLOYER_", ""));
@@ -1205,6 +1330,60 @@ bot.on("callback_query", async (cbQuery) => {
     }
   }
 });
+
+// ── שידור כללי (אדמין) ───────────────────────────────────────────────────────
+
+function broadcastFieldMatches(row, field, isCandidate) {
+  if (field === "all") return true;
+  const text = isCandidate ? (row.interests || "") : (row.fields || "");
+  return text.split(", ").map((s) => s.trim()).includes(field);
+}
+
+function broadcastPoliticalMatches(row, political) {
+  if (political === "all") return true;
+  const side = row.political_side || "";
+  if (side === "שניהם" || side === "לא רלוונטי") return true;
+  return side === political;
+}
+
+async function getBroadcastRecipients(bs) {
+  const { audience, field, political } = bs;
+  const ids = new Set();
+  if (audience === "candidates" || audience === "all") {
+    const res = await query(`SELECT * FROM candidates WHERE status='active'`);
+    for (const c of res.rows) {
+      if (!broadcastFieldMatches(c, field, true)) continue;
+      if (!broadcastPoliticalMatches(c, political)) continue;
+      ids.add(c.telegram_id);
+    }
+  }
+  if (audience === "employers" || audience === "all") {
+    const res = await query(`SELECT * FROM employers WHERE status='active'`);
+    for (const e of res.rows) {
+      if (!broadcastFieldMatches(e, field, false)) continue;
+      if (!broadcastPoliticalMatches(e, political)) continue;
+      ids.add(e.telegram_id);
+    }
+  }
+  return ids;
+}
+
+async function sendBroadcast(bs) {
+  const ids = await getBroadcastRecipients(bs);
+  const finalMessage = bs.addWhatsapp
+    ? `${bs.message}\n\nלפרטים: wa.me/972548028082`
+    : bs.message;
+  let sent = 0;
+  for (const id of ids) {
+    try {
+      await bot.sendMessage(id, finalMessage);
+      sent++;
+    } catch (e) {
+      console.error(`Broadcast failed for ${id}:`, e.message);
+    }
+  }
+  return sent;
+}
 
 // ── פקודות אדמין בטקסט (טבלה / סטטוס) ──────────────────────────────────────
 
