@@ -265,71 +265,68 @@ function workplaceMatches(candidatePref, orgType) {
   return candidatePref === orgType;
 }
 
-// ── חיבור אוטומטי ──────────────────────────────────────────────────────────────
+// ── שליחת סיכום התאמות למגייס ──────────────────────────────────────────────────
 
-async function autoConnect(candidate, employer, skipCandidateNotification = false) {
-  const candidateId = candidate.telegram_id;
-  const employerId  = employer.telegram_id;
-  const cd = candidate;
-  const ed = employer;
+async function sendMatchSummary(candidates, employer, notifyCandidates = true) {
+  const employerId = employer.telegram_id;
 
-  // שלח ללשכה/עירייה את פרטי המועמד
-  const degreeStr = [cd.degree, cd.field_of_study].filter(Boolean).join(", ");
-  const rec = await getRecommendation(candidateId);
-  await bot.sendMessage(
-    employerId,
-    `יש מישהו שנראה לי מדויק בשבילכם 👋\n\n` +
-    `שם: ${cd.full_name || ""}\n` +
-    `נייד: ${cd.phone || ""}\n` +
-    `מייל: ${cd.email || ""}\n` +
-    (degreeStr ? `תואר: ${degreeStr}\n` : "") +
-    `ניסיון: ${cd.experience || ""}\n` +
-    (rec ? `\n⭐ המלצה: "${rec.text}"\n` : "") +
-    (cd.references ? `\n📋 ממליצים: ${cd.references}\n` : "") +
-    `\nתעדכנו אותי איך יצא 🤝`,
-    {
-      reply_markup: {
-        inline_keyboard: [[
-          { text: "הפסק לקבל הצעות מתאימות מסוג זה 🔕", callback_data: `STOP_OFFERS_EMPLOYER_${employerId}` },
-        ]],
-      },
-    }
-  );
-
-  if (cd.cv) {
-    if (cd.cv.startsWith("file_id:")) {
-      await bot.sendDocument(employerId, cd.cv.replace("file_id:", ""), {}, { caption: "קורות חיים" });
-    } else if (cd.cv.startsWith("photo_id:")) {
-      await bot.sendPhoto(employerId, cd.cv.replace("photo_id:", ""), { caption: "קורות חיים" });
+  for (const candidate of candidates) {
+    await recordMatch(candidate.telegram_id, employerId, candidate.full_name || "מועמד", employer.contact_name || "לשכה");
+    if (notifyCandidates) {
+      await bot.sendMessage(
+        candidate.telegram_id,
+        `העברתי את הפרטים שלך ללשכה/גוף חדש שנרשם ונראה לי מתאים. אם יתאים — ייצרו איתך קשר 🤝`,
+        { reply_markup: { inline_keyboard: [[{ text: "הפסק לקבל הצעות 🔕", callback_data: `STOP_OFFERS_CANDIDATE_${candidate.telegram_id}` }]] } }
+      );
     }
   }
 
-  // שלח למועמד הודעת עדכון — רק כשמגייס חדש נרשם ומוצא אותו
-  if (!skipCandidateNotification) {
+  const keyboard = candidates.map((c) => ([{
+    text: `📎 קורות חיים של ${c.full_name || "מועמד"}`,
+    callback_data: `CV_${c.telegram_id}_${employerId}`,
+  }]));
+  keyboard.push([{ text: "הפסק לקבל הצעות 🔕", callback_data: `STOP_OFFERS_EMPLOYER_${employerId}` }]);
+
+  await bot.sendMessage(
+    employerId,
+    `מצאתי ${candidates.length} מועמדים שנראים לי מתאימים 👋`,
+    { reply_markup: { inline_keyboard: keyboard } }
+  );
+
+  await bot.sendMessage(
+    ADMIN_ID,
+    `🔗 חיבורים אוטומטיים\n\n` +
+    `🏛 ${employer.org_type || "לשכה"}: ${employer.contact_name || ""}\n` +
+    `👤 מועמדים: ${candidates.map((c) => c.full_name || "מועמד").join(", ")}`
+  );
+}
+
+// ── מעקב קורות חיים ──────────────────────────────────────────────────────────
+
+function scheduleCVFollowUp(candidateId, employerId, candidateName) {
+  const delay = 7 * 24 * 60 * 60 * 1000;
+  setTimeout(async () => {
+    const res = await query(
+      `SELECT status FROM cv_requests WHERE employer_id=$1 AND candidate_id=$2`,
+      [employerId, candidateId]
+    );
+    const req = res.rows[0];
+    if (!req || req.status === "contacted" || req.status === "not_suitable") return;
+
     await bot.sendMessage(
-      candidateId,
-      `העברתי את הפרטים שלך ללשכה/גוף חדש שנרשם ונראה לי מתאים. אם יתאים — ייצרו איתך קשר 🤝`,
+      employerId,
+      `מה קרה עם ${candidateName}?`,
       {
         reply_markup: {
           inline_keyboard: [[
-            { text: "הפסק לקבל הצעות 🔕", callback_data: `STOP_OFFERS_CANDIDATE_${candidateId}` },
+            { text: "✅ יצרתי קשר",  callback_data: `CVFOLLOWUP_CONTACTED_${candidateId}_${employerId}` },
+            { text: "⏳ עוד בתהליך", callback_data: `CVFOLLOWUP_INPROGRESS_${candidateId}_${employerId}` },
+            { text: "❌ לא מתאים",   callback_data: `CVFOLLOWUP_NOTSUITABLE_${candidateId}_${employerId}` },
           ]],
         },
       }
     );
-  }
-
-  // עדכון אדמין — לצפייה בלבד
-  await bot.sendMessage(
-    ADMIN_ID,
-    `🔗 חיבור אוטומטי בוצע\n\n` +
-    `👤 מועמד: ${cd.full_name || ""}\n` +
-    `🏛 ${ed.org_type || "לשכה"}: ${ed.contact_name || ""}\n` +
-    `תחומים: ${cd.interests || ""}`
-  );
-
-  await recordMatch(candidateId, employerId, cd.full_name || "מועמד", ed.contact_name || "לשכה");
-  scheduleFollowUp(candidateId, employerId);
+  }, delay);
 }
 
 function politicalMatches(candidateSide, employerSide) {
@@ -674,7 +671,7 @@ async function finishSession(chatId, session) {
     const newCandidate = await getCandidateRecord(chatId);
     const matchingEmployers = newCandidate ? await findMatchingEmployers(newCandidate) : [];
     for (const employer of matchingEmployers) {
-      await autoConnect(newCandidate, employer, true);
+      await sendMatchSummary([newCandidate], employer, false);
     }
     if (matchingEmployers.length > 0) {
       await bot.sendMessage(
@@ -698,11 +695,8 @@ async function finishSession(chatId, session) {
     const newEmployer = await getEmployerRecord(chatId);
     const employerForMatch = newEmployer || { ...session.data, telegram_id: chatId };
     const matches = await findMatches(employerForMatch);
-    for (const match of matches) {
-      await autoConnect(match, employerForMatch);
-    }
     if (matches.length > 0) {
-      await bot.sendMessage(chatId, `👋 יש לי ${matches.length} אנשים שנראים לי מדויקים בשבילכם. שלחתי להם את הפרטים שלכם 🤝`);
+      await sendMatchSummary(matches, employerForMatch, true);
     }
   }
   await exportExcel();
@@ -1030,6 +1024,63 @@ bot.on("callback_query", async (cbQuery) => {
     );
     await bot.sendMessage(Number(targetChatId), "מצטערים, הפעם לא הצלחנו לאשר 🙏\nלפניה ישירה: wa.me/972548028082");
     await bot.sendMessage(ADMIN_ID, "❌ הבקשה נדחתה.");
+    return;
+  }
+
+  // שליחת קורות חיים לפי בקשה
+  if (data.startsWith("CV_")) {
+    const parts = data.split("_");
+    const candidateId = Number(parts[1]);
+    const employerId  = Number(parts[2]);
+    const candidate   = await getCandidateRecord(candidateId);
+    if (!candidate || !candidate.cv) {
+      await bot.sendMessage(chatId, "לא מצאתי קורות חיים 🙏");
+      return;
+    }
+    if (candidate.cv.startsWith("file_id:")) {
+      await bot.sendDocument(chatId, candidate.cv.replace("file_id:", ""), {}, { caption: `קורות חיים — ${candidate.full_name || "מועמד"}` });
+    } else if (candidate.cv.startsWith("photo_id:")) {
+      await bot.sendPhoto(chatId, candidate.cv.replace("photo_id:", ""), { caption: `קורות חיים — ${candidate.full_name || "מועמד"}` });
+    }
+    await query(
+      `INSERT INTO cv_requests (employer_id, candidate_id)
+       VALUES ($1, $2)
+       ON CONFLICT (employer_id, candidate_id) DO UPDATE SET requested_at=NOW(), status='pending', updated_at=NOW()`,
+      [employerId, candidateId]
+    );
+    scheduleCVFollowUp(candidateId, employerId, candidate.full_name || "מועמד");
+    return;
+  }
+
+  // מעקב קורות חיים
+  if (data.startsWith("CVFOLLOWUP_")) {
+    const parts = data.split("_");
+    const action      = parts[1];
+    const candidateId = Number(parts[2]);
+    const employerId  = Number(parts[3]);
+    const candidate   = await getCandidateRecord(candidateId);
+    const employer    = await getEmployerRecord(employerId);
+    const candidateName = candidate?.full_name || "מועמד";
+    const employerName  = employer?.contact_name || "לשכה";
+
+    if (action === "INPROGRESS") {
+      await query(
+        `UPDATE cv_requests SET status='in_progress', updated_at=NOW() WHERE employer_id=$1 AND candidate_id=$2`,
+        [employerId, candidateId]
+      );
+      await bot.sendMessage(chatId, "תודה! אחזור אליך בעוד שבוע 🤝");
+      await bot.sendMessage(ADMIN_ID, `עדכון על ${candidateName} ↔ ${employerName}: עוד בתהליך ⏳`);
+      scheduleCVFollowUp(candidateId, employerId, candidateName);
+    } else {
+      const status = action === "CONTACTED" ? "contacted" : "not_suitable";
+      const label  = action === "CONTACTED" ? "יצר קשר ✅" : "לא מתאים ❌";
+      await query(
+        `UPDATE cv_requests SET status=$3, updated_at=NOW() WHERE employer_id=$1 AND candidate_id=$2`,
+        [employerId, candidateId, status]
+      );
+      await bot.sendMessage(chatId, "תודה על העדכון 🙏");
+      await bot.sendMessage(ADMIN_ID, `עדכון על ${candidateName} ↔ ${employerName}: ${label}`);
+    }
     return;
   }
 

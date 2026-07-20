@@ -135,5 +135,17 @@ export async function initDB() {
     )
   `);
 
+  await query(`
+    CREATE TABLE IF NOT EXISTS cv_requests (
+      id SERIAL PRIMARY KEY,
+      employer_id BIGINT,
+      candidate_id BIGINT,
+      requested_at TIMESTAMPTZ DEFAULT NOW(),
+      status TEXT DEFAULT 'pending',
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(employer_id, candidate_id)
+    )
+  `);
+
   console.log("✅ DB tables initialized");
 }
