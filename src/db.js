@@ -3,10 +3,18 @@ const { Pool } = pg;
 
 console.log('DATABASE_URL:', process.env.DATABASE_URL ? process.env.DATABASE_URL.substring(0, 30) + '...' : 'NOT SET');
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false,
-});
+const connectionConfig = process.env.DATABASE_URL && !process.env.DATABASE_URL.includes('base')
+  ? { connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } }
+  : {
+      host: process.env.PGHOST,
+      port: process.env.PGPORT || 5432,
+      database: process.env.PGDATABASE || process.env.POSTGRES_DB,
+      user: process.env.PGUSER || process.env.POSTGRES_USER,
+      password: process.env.PGPASSWORD || process.env.POSTGRES_PASSWORD,
+      ssl: { rejectUnauthorized: false }
+    };
+
+const pool = new Pool(connectionConfig);
 
 export async function query(text, params) {
   const client = await pool.connect();
