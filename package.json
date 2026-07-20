@@ -5,8 +5,12 @@
   "description": "WhatsApp bot for Akademia B – parliamentary advisors matching",
   "main": "src/index.js",
   "scripts": {
+    "build": "npm install",
     "start": "node src/index.js",
     "dev": "node --watch src/index.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.30.0",
