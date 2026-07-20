@@ -1198,6 +1198,12 @@ async function sendExcel() {
 // ── אתחול ────────────────────────────────────────────────────────────────────
 
 (async () => {
-  await initDB();
+  try {
+    await initDB();
+    console.log("✅ Database connected");
+  } catch (err) {
+    console.error("❌ Database connection failed:", err.message);
+    console.log("⚠️ Bot will continue without database");
+  }
   console.log("🟢 קוזו bot פועל בטלגרם...");
 })();
