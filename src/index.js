@@ -1294,23 +1294,45 @@ bot.on("callback_query", async (cbQuery) => {
 
     if (data.startsWith("BROADCAST_AUDIENCE_")) {
       bs.audience = data.replace("BROADCAST_AUDIENCE_", "");
+      bs.fieldSelect = [];
       bs.step = "field";
-      await bot.sendMessage(chatId, "רק תחום מסוים?", {
+      await bot.sendMessage(chatId, "רק תחום מסוים?\nאפשר לסמן כמה ולחץ סיום ✓", {
         reply_markup: { inline_keyboard: [
           [{ text: "ייעוץ פרלמנטרי", callback_data: "BROADCAST_FIELD_ייעוץ פרלמנטרי" }],
           [{ text: "דוברות",          callback_data: "BROADCAST_FIELD_דוברות" }],
           [{ text: "סושיאל",          callback_data: "BROADCAST_FIELD_סושיאל ורשתות חברתיות" }],
           [{ text: "יועץ פוליטי",    callback_data: "BROADCAST_FIELD_יועץ פוליטי" }],
           [{ text: "עריכת וידאו",     callback_data: "BROADCAST_FIELD_עריכת וידאו" }],
-          [{ text: "כולם",            callback_data: "BROADCAST_FIELD_all" }],
+          [{ text: "כולם",  callback_data: "BROADCAST_FIELD_ALL" },
+           { text: "סיום ✓", callback_data: "BROADCAST_FIELD_DONE" }],
         ]},
       });
       return;
     }
 
     if (data.startsWith("BROADCAST_FIELD_")) {
-      bs.field = data.replace("BROADCAST_FIELD_", "");
-      bs.step = "political";
+      if (data === "BROADCAST_FIELD_ALL") {
+        bs.fields = [];
+        bs.step = "political";
+      } else if (data === "BROADCAST_FIELD_DONE") {
+        if (!bs.fieldSelect || bs.fieldSelect.length === 0) {
+          await bot.sendMessage(chatId, "בחר לפחות תחום אחד, או לחץ 'כולם'");
+          return;
+        }
+        bs.fields = [...bs.fieldSelect];
+        bs.step = "political";
+      } else {
+        if (!bs.fieldSelect) bs.fieldSelect = [];
+        const field = data.replace("BROADCAST_FIELD_", "");
+        if (bs.fieldSelect.includes(field)) {
+          bs.fieldSelect = bs.fieldSelect.filter((f) => f !== field);
+          await bot.sendMessage(chatId, `➖ ${field} הוסר\nהמשך לבחור או לחץ סיום ✓`);
+        } else {
+          bs.fieldSelect.push(field);
+          await bot.sendMessage(chatId, `➕ ${field}\nהמשך לבחור או לחץ סיום ✓`);
+        }
+        return;
+      }
       await bot.sendMessage(chatId, "רק צד פוליטי?", {
         reply_markup: { inline_keyboard: [
           [{ text: "קואליציה",  callback_data: "BROADCAST_POLITICAL_קואליציה" }],
@@ -1481,10 +1503,11 @@ bot.on("callback_query", async (cbQuery) => {
 
 // ── שידור כללי (אדמין) ───────────────────────────────────────────────────────
 
-function broadcastFieldMatches(row, field, isCandidate) {
-  if (field === "all") return true;
+function broadcastFieldMatches(row, fields, isCandidate) {
+  if (!fields || fields.length === 0) return true;
   const text = isCandidate ? (row.interests || "") : (row.fields || "");
-  return text.split(", ").map((s) => s.trim()).includes(field);
+  const rowFields = text.split(", ").map((s) => s.trim());
+  return fields.some((f) => rowFields.includes(f));
 }
 
 function broadcastPoliticalMatches(row, political) {
@@ -1495,12 +1518,12 @@ function broadcastPoliticalMatches(row, political) {
 }
 
 async function getBroadcastRecipients(bs) {
-  const { audience, field, political } = bs;
+  const { audience, fields, political } = bs;
   const ids = new Set();
   if (audience === "candidates" || audience === "all") {
     const res = await query(`SELECT * FROM candidates WHERE status='active'`);
     for (const c of res.rows) {
-      if (!broadcastFieldMatches(c, field, true)) continue;
+      if (!broadcastFieldMatches(c, fields, true)) continue;
       if (!broadcastPoliticalMatches(c, political)) continue;
       ids.add(c.telegram_id);
     }
@@ -1508,7 +1531,7 @@ async function getBroadcastRecipients(bs) {
   if (audience === "employers" || audience === "all") {
     const res = await query(`SELECT * FROM employers WHERE status='active'`);
     for (const e of res.rows) {
-      if (!broadcastFieldMatches(e, field, false)) continue;
+      if (!broadcastFieldMatches(e, fields, false)) continue;
       if (!broadcastPoliticalMatches(e, political)) continue;
       ids.add(e.telegram_id);
     }
