@@ -175,13 +175,15 @@ async function saveRecord(type, chatId, username, data) {
         full_name, phone, email, city, degree, field_of_study,
         languages, is_intern, internship_mentor, internship_phone,
         experience, interests, workplace_pref, timing, availability,
-        cv, motivation, has_references, "references", declaration
+        cv, motivation, has_references, "references",
+        political_side, has_license, english_level, irregular_hours, declaration
       ) VALUES (
         $1, $2,
         $3, $4, $5, $6, $7, $8,
         $9, $10, $11, $12,
         $13, $14, $15, $16, $17,
-        $18, $19, $20, $21, $22
+        $18, $19, $20, $21,
+        $22, $23, $24, $25, $26
       )`,
       [
         chatId, username || "",
@@ -191,7 +193,9 @@ async function saveRecord(type, chatId, username, data) {
         data.internship_phone || "", data.experience || "", data.interests || "",
         data.workplace_pref || "", data.timing || "", data.availability || "",
         data.cv || "", data.motivation || "", data.has_references || "",
-        data.references || "", data.declaration || "",
+        data.references || "",
+        data.political_side || "", data.has_license || "", data.english_level || "",
+        data.irregular_hours || "", data.declaration || "",
       ]
     );
   } else {
@@ -200,19 +204,20 @@ async function saveRecord(type, chatId, username, data) {
         telegram_id, telegram_username,
         org_type, contact_name, phone, email,
         fields, timing, availability, experience_importance,
-        notes, declaration
+        notes, political_side, requires_license, english_required, irregular_hours, declaration
       ) VALUES (
         $1, $2,
         $3, $4, $5, $6,
         $7, $8, $9, $10,
-        $11, $12
+        $11, $12, $13, $14, $15, $16
       )`,
       [
         chatId, username || "",
         data.org_type || "", data.contact_name || "", data.phone || "",
         data.email || "", data.fields || "", data.timing || "",
         data.availability || "", data.experience_importance || "",
-        data.notes || "", data.declaration || "",
+        data.notes || "", data.political_side || "", data.requires_license || "",
+        data.english_required || "", data.irregular_hours || "", data.declaration || "",
       ]
     );
   }
@@ -327,6 +332,12 @@ async function autoConnect(candidate, employer, skipCandidateNotification = fals
   scheduleFollowUp(candidateId, employerId);
 }
 
+function politicalMatches(candidateSide, employerSide) {
+  if (!candidateSide || candidateSide === "שניהם") return true;
+  if (!employerSide  || employerSide  === "לא רלוונטי") return true;
+  return candidateSide === employerSide;
+}
+
 async function findMatches(employer) {
   const res = await query(`SELECT * FROM candidates WHERE status='active'`);
   const candidates = res.rows;
@@ -335,6 +346,7 @@ async function findMatches(employer) {
   for (const c of candidates) {
     if (await hasBeenMatched(c.telegram_id, employer.telegram_id)) continue;
     if (!workplaceMatches(c.workplace_pref, employer.org_type)) continue;
+    if (!politicalMatches(c.political_side, employer.political_side)) continue;
     const interests = (c.interests || "").split(", ");
     if (fields.some((f) => interests.some((i) => i.trim() === f.trim()))) {
       filtered.push(c);
@@ -352,6 +364,7 @@ async function findMatchingEmployers(candidate) {
   for (const e of employers) {
     if (await hasBeenMatched(candidate.telegram_id, e.telegram_id)) continue;
     if (!workplaceMatches(candidate.workplace_pref, e.org_type)) continue;
+    if (!politicalMatches(candidate.political_side, e.political_side)) continue;
     const fields = (e.fields || "").split(", ").map((f) => f.trim());
     if (fields.some((f) => interests.includes(f))) {
       filtered.push(e);
@@ -544,6 +557,10 @@ const CANDIDATE_STEPS = [
   { key: "motivation",        question: "מה מביא אותך לקוזו?\nכמה מילים מהלב",                                   type: "text"   },
   { key: "has_references",    question: "האם יש לך ממליצים שלשכות יוכלו לפנות אליהם?",                                         type: "single", options: [["כן ✅", "לא ❌"]] },
   { key: "references",        question: "ציין שם ונייד של הממליצים (אפשר כמה, מופרדים בשורות)",                         type: "text",   conditional: "has_references=כן ✅" },
+  { key: "political_side",    question: "עם איזה צד פוליטי תרצה לעבוד?",                                                  type: "single", options: [["קואליציה", "אופוזיציה"], ["שניהם"]] },
+  { key: "has_license",       question: "יש רישיון רכב?",                                                                  type: "single", options: [["כן", "לא"]] },
+  { key: "english_level",     question: "רמת אנגלית?",                                                                     type: "single", options: [["גבוהה", "בסיסית"], ["לא רלוונטי"]] },
+  { key: "irregular_hours",   question: "מוכן/ה לשעות לא שגרתיות?",                                                       type: "single", options: [["כן", "לא"]] },
   { key: "declaration",       question: "רק לידיעה. הפרטים ישמשו אותי לחיבורים בלבד. אין בזה התחייבות מאף צד 🤝", type: "single", options: [["מאשר ✅"]] },
 ];
 
@@ -556,6 +573,10 @@ const EMPLOYER_STEPS = [
   { key: "availability",         question: "מה היקף המשרה המבוקשת?",                                                            type: "single", options: [["משרה מלאה", "משרה חלקית"], ["פרילנס", "פתוח לכל הצעה"]] },
   { key: "experience_importance",question: "כמה חשוב ניסיון קודם בעבודה ציבורית/פרלמנטרית?",                                     type: "single", options: [["חובה מוחלטת", "יתרון משמעותי"], ["לא הכרחי"]] },
   { key: "notes",                question: "יש דגשים נוספים שחשוב שנדע?\nאפשר לכתוב בחופשיות, גם 'אין' זה תשובה",          type: "text"   },
+  { key: "political_side",       question: "אתם מהקואליציה או האופוזיציה?",                                                 type: "single", options: [["קואליציה", "אופוזיציה"], ["לא רלוונטי"]] },
+  { key: "requires_license",     question: "נדרש רישיון רכב?",                                                              type: "single", options: [["חובה", "יתרון"], ["לא נדרש"]] },
+  { key: "english_required",     question: "נדרשת אנגלית?",                                                                 type: "single", options: [["ברמה גבוהה", "בסיסית"], ["לא נדרש"]] },
+  { key: "irregular_hours",      question: "נדרשת זמינות לשעות לא שגרתיות?",                                               type: "single", options: [["כן", "לא"]] },
   { key: "declaration",          question: "רק לידיעה. הפרטים ישמשו לחיבור מקצועי בלבד. אין בזה התחייבות מאף צד 🤝", type: "single", options: [["מאשר ✅"]] },
 ];
 
