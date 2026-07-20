@@ -299,6 +299,8 @@ async function sendMatchSummary(candidates, employer, notifyCandidates = true) {
     `🏛 ${employer.org_type || "לשכה"}: ${employer.contact_name || ""}\n` +
     `👤 מועמדים: ${candidates.map((c) => c.full_name || "מועמד").join(", ")}`
   );
+
+  scheduleEmployerListFollowUp(employerId);
 }
 
 // ── מעקב קורות חיים ──────────────────────────────────────────────────────────
@@ -327,6 +329,76 @@ function scheduleCVFollowUp(candidateId, employerId, candidateName) {
       }
     );
   }, delay);
+}
+
+// ── פידבק ומעקב אוטומטי ──────────────────────────────────────────────────────
+
+// פידבק ליועץ אחרי 14 ימים ללא פנייה מלשכה
+function scheduleCandidateNudge(candidateId) {
+  setTimeout(async () => {
+    const cand = await getCandidateRecord(candidateId);
+    if (!cand || cand.status !== "active") return;
+    const res = await query(
+      `SELECT 1 FROM cv_requests WHERE candidate_id=$1 LIMIT 1`,
+      [candidateId]
+    );
+    if (res.rows.length > 0) return;
+    try {
+      await bot.sendMessage(
+        candidateId,
+        "הפרופיל שלך פעיל אצלנו, עדיין מחפשים עבורך. ברגע שיהיה התאמה — תשמע ממני."
+      );
+    } catch (_) {}
+  }, 14 * 24 * 60 * 60 * 1000);
+}
+
+// מעקב אחרי מגייס שלא פתח אף קורות חיים אחרי 7 ימים
+function scheduleEmployerListFollowUp(employerId) {
+  setTimeout(async () => {
+    const emp = await getEmployerRecord(employerId);
+    if (!emp || emp.status !== "active") return;
+    const res = await query(
+      `SELECT 1 FROM cv_requests WHERE employer_id=$1 LIMIT 1`,
+      [employerId]
+    );
+    if (res.rows.length > 0) return;
+    try {
+      await bot.sendMessage(
+        employerId,
+        "עדיין מחפשים? הרשימה עדיין פעילה.",
+        {
+          reply_markup: {
+            inline_keyboard: [[
+              { text: "כן, עוד מחפשים", callback_data: `EMPLIST_STILL_${employerId}` },
+              { text: "לא, מצאנו",       callback_data: `EMPLIST_FOUND_${employerId}` },
+            ]],
+          },
+        }
+      );
+    } catch (_) {}
+  }, 7 * 24 * 60 * 60 * 1000);
+}
+
+// מעקב חודשי ליועץ — 30 ימים מרישום
+function scheduleMonthlyCheckin(candidateId) {
+  setTimeout(async () => {
+    const cand = await getCandidateRecord(candidateId);
+    if (!cand || cand.status !== "active") return;
+    try {
+      await bot.sendMessage(
+        candidateId,
+        "חודש עבר מאז שנרשמת. מה הסטטוס?",
+        {
+          reply_markup: {
+            inline_keyboard: [[
+              { text: "עדיין מחפש",   callback_data: `CHECKIN_STILL_${candidateId}` },
+              { text: "מצאתי עבודה", callback_data: `CHECKIN_FOUND_${candidateId}` },
+            ]],
+          },
+        }
+      );
+    } catch (_) {}
+  }, 30 * 24 * 60 * 60 * 1000);
 }
 
 function politicalMatches(candidateSide, employerSide) {
@@ -705,6 +777,9 @@ async function finishSession(chatId, session) {
     for (const employer of futureEmployers) {
       await sendMatchSummary([newCandidate], employer, false);
     }
+    scheduleCandidateNudge(chatId);
+    scheduleMonthlyCheckin(chatId);
+
     if (matchingEmployers.length > 0) {
       await bot.sendMessage(
         chatId,
@@ -775,6 +850,27 @@ bot.onText(/\/start/, async (msg) => {
             { text: "כן, אשמח להמליץ ✅", callback_data: `REC_YES_${recCandidate.telegram_id}` },
             { text: "לא תודה ❌",          callback_data: `REC_NO_${recCandidate.telegram_id}`  },
           ]],
+        },
+      }
+    );
+    return;
+  }
+
+  // זיהוי רישום כפול
+  const existingCandidate = await getCandidateRecord(chatId);
+  const existingEmployer  = await getEmployerRecord(chatId);
+  if (existingCandidate || existingEmployer) {
+    const name = existingCandidate?.full_name || existingEmployer?.contact_name || "";
+    await bot.sendMessage(
+      chatId,
+      `${name ? `שלום ${name}!\n` : ""}כבר רשום אצלנו. מה תרצה לעשות?`,
+      {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "עדכן פרטים",      callback_data: "EXISTING_UPDATE" }],
+            [{ text: "השהה אותי",       callback_data: "EXISTING_PAUSE" }],
+            [{ text: "מצאתי עבודה 🎉", callback_data: "EXISTING_FOUND_JOB" }],
+          ],
         },
       }
     );
@@ -1139,6 +1235,58 @@ bot.on("callback_query", async (cbQuery) => {
     return;
   }
 
+  // רישום כפול — בחירת פעולה
+  if (data === "EXISTING_UPDATE") {
+    sessions[chatId] = { ...newSession("update", ""), stage: "updating" };
+    await bot.sendMessage(chatId, "יאללה, נעדכן את הפרטים שלך");
+    await sendStep(chatId, sessions[chatId]);
+    return;
+  }
+  if (data === "EXISTING_PAUSE") {
+    await pauseCandidate(chatId);
+    await pauseEmployer(chatId);
+    await bot.sendMessage(chatId, "הבנתי. עצרתי. כשתרצו לחזור — כתבו *החזר אותי לפעילות*", { parse_mode: "Markdown" });
+    await bot.sendMessage(ADMIN_ID, `⏸ משתמש השהה את עצמו (ID: ${chatId})`);
+    return;
+  }
+  if (data === "EXISTING_FOUND_JOB") {
+    await archiveCandidate(chatId);
+    await exportExcel();
+    await bot.sendMessage(chatId, "כיף לשמוע! 🎉 אם יום אחד תרצו לחזור — /start תמיד פתוח");
+    await bot.sendMessage(ADMIN_ID, `📦 מועמד הועבר לארכיון (ID: ${chatId}), מצא עבודה`);
+    return;
+  }
+
+  // מעקב אחרי מגייס שלא פתח קורות חיים
+  if (data.startsWith("EMPLIST_STILL_")) {
+    await bot.sendMessage(chatId, "מצוין, ממשיכים לחפש עבורכם 🤝");
+    return;
+  }
+  if (data.startsWith("EMPLIST_FOUND_")) {
+    const employerId = Number(data.replace("EMPLIST_FOUND_", ""));
+    await pauseEmployer(employerId);
+    await exportExcel();
+    await bot.sendMessage(chatId, "מעולה! 🎉 נסמן אתכם כלא פעיל. בהצלחה!");
+    await bot.sendMessage(ADMIN_ID, `✅ לשכה מצאה מועמד, הועברה לסטטוס לא פעיל (ID: ${employerId})`);
+    return;
+  }
+
+  // check-in חודשי ליועץ
+  if (data.startsWith("CHECKIN_STILL_")) {
+    const candidateId = Number(data.replace("CHECKIN_STILL_", ""));
+    await bot.sendMessage(chatId, "ממשיכים לחפש עבורך 🤝");
+    scheduleMonthlyCheckin(candidateId);
+    return;
+  }
+  if (data.startsWith("CHECKIN_FOUND_")) {
+    const candidateId = Number(data.replace("CHECKIN_FOUND_", ""));
+    await archiveCandidate(candidateId);
+    await exportExcel();
+    await bot.sendMessage(chatId, "מעולה! 🎉 כיף לשמוע. אם יום אחד תרצו לחזור — /start תמיד פתוח");
+    await bot.sendMessage(ADMIN_ID, `📦 מועמד הועבר לארכיון (ID: ${candidateId}), מצא עבודה (check-in חודשי)`);
+    return;
+  }
+
   // שידור כללי — אדמין בלבד
   if (chatId === ADMIN_ID && data.startsWith("BROADCAST_")) {
     const bs = sessions[chatId];
@@ -1385,6 +1533,72 @@ async function sendBroadcast(bs) {
   return sent;
 }
 
+// ── דוחות תקופתיים ───────────────────────────────────────────────────────────
+
+async function sendMonthlyReport() {
+  const oneMonthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  const [noMatchRes, activeEmpRes, successRes] = await Promise.all([
+    query(
+      `SELECT COUNT(DISTINCT c.telegram_id) FROM candidates c
+       WHERE c.status='active' AND c.created_at < $1
+       AND NOT EXISTS (SELECT 1 FROM matches m WHERE m.candidate_id = c.telegram_id)`,
+      [oneMonthAgo]
+    ),
+    query(`SELECT COUNT(DISTINCT telegram_id) FROM employers WHERE status='active'`),
+    query(
+      `SELECT COUNT(*) FROM cv_requests WHERE status='contacted' AND updated_at >= $1`,
+      [oneMonthAgo]
+    ),
+  ]);
+  await bot.sendMessage(
+    ADMIN_ID,
+    `📅 סיכום חודשי\n\n` +
+    `יועצים ללא התאמה מעל חודש: ${noMatchRes.rows[0].count}\n` +
+    `מגייסים פעילים: ${activeEmpRes.rows[0].count}\n` +
+    `חיבורים שהצליחו החודש: ${successRes.rows[0].count}`
+  );
+}
+
+function scheduleMonthlyReport() {
+  const now  = new Date();
+  const next = new Date(now.getFullYear(), now.getMonth() + 1, 1, 9, 0, 0, 0);
+  setTimeout(async () => {
+    try { await sendMonthlyReport(); } catch (e) { console.error("monthly report error:", e.message); }
+    scheduleMonthlyReport();
+  }, next - now);
+}
+
+async function sendWeeklySummary() {
+  const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  const [newCandsRes, newEmpsRes, matchesRes, cvsRes] = await Promise.all([
+    query(`SELECT COUNT(*) FROM candidates WHERE created_at >= $1`, [oneWeekAgo]),
+    query(`SELECT COUNT(*) FROM employers WHERE created_at >= $1`, [oneWeekAgo]),
+    query(`SELECT COUNT(*) FROM matches WHERE matched_at >= $1`, [oneWeekAgo]),
+    query(`SELECT COUNT(*) FROM cv_requests WHERE requested_at >= $1`, [oneWeekAgo]),
+  ]);
+  await bot.sendMessage(
+    ADMIN_ID,
+    `📊 סיכום שבוע\n\n` +
+    `יועצים חדשים שנרשמו: ${newCandsRes.rows[0].count}\n` +
+    `מגייסים חדשים שנרשמו: ${newEmpsRes.rows[0].count}\n` +
+    `חיבורים שבוצעו: ${matchesRes.rows[0].count}\n` +
+    `קורות חיים שנפתחו: ${cvsRes.rows[0].count}`
+  );
+}
+
+function scheduleWeeklySummary() {
+  const now = new Date();
+  const day = now.getDay(); // 0 = Sunday
+  const daysUntil = day === 0 && now.getHours() < 9 ? 0 : (day === 0 ? 7 : 7 - day);
+  const next = new Date(now);
+  next.setDate(now.getDate() + daysUntil);
+  next.setHours(9, 0, 0, 0);
+  setTimeout(async () => {
+    try { await sendWeeklySummary(); } catch (e) { console.error("weekly summary error:", e.message); }
+    scheduleWeeklySummary();
+  }, next - now);
+}
+
 // ── פקודות אדמין בטקסט (טבלה / סטטוס) ──────────────────────────────────────
 
 async function sendStatus() {
@@ -1456,5 +1670,7 @@ async function sendExcel() {
     console.error("❌ Database connection failed:", err.message);
     console.log("⚠️ Bot will continue without database");
   }
+  scheduleMonthlyReport();
+  scheduleWeeklySummary();
   console.log("🟢 קוזו bot פועל בטלגרם...");
 })();
