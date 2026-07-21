@@ -157,11 +157,16 @@ export async function initDB() {
       employer_id BIGINT,
       candidate_id BIGINT,
       requested_at TIMESTAMPTZ DEFAULT NOW(),
-      status TEXT DEFAULT 'pending',
+      status TEXT DEFAULT 'matched',
       updated_at TIMESTAMPTZ DEFAULT NOW(),
       UNIQUE(employer_id, candidate_id)
     )
   `);
+
+  // מיגרציה — שינוי שמות סטטוס ב-cv_requests
+  await query(`UPDATE cv_requests SET status='matched'   WHERE status='pending'`);
+  await query(`UPDATE cv_requests SET status='connected' WHERE status='contacted'`);
+  await query(`UPDATE cv_requests SET status='rejected'  WHERE status='not_suitable'`);
 
   console.log("✅ DB tables initialized");
 }

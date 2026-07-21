@@ -237,7 +237,7 @@ function scheduleFollowUp(candidateId, employerId) {
 
     await bot.sendMessage(
       ADMIN_ID,
-      `📊 מעקב חיבור, שבוע עבר
+      `📊 מעקב התאמה, שבוע עבר
 
 ` +
       `👤 מועמד: ${match.candidate_name}
@@ -245,7 +245,7 @@ function scheduleFollowUp(candidateId, employerId) {
       `🏛 לשכה: ${match.employer_name}
 
 ` +
-      `האם החיבור עדיין בתהליך?`,
+      `האם ההתאמה עדיין בתהליך?`,
       {
         reply_markup: {
           inline_keyboard: [[
@@ -295,7 +295,7 @@ async function sendMatchSummary(candidates, employer, notifyCandidates = true) {
 
   await bot.sendMessage(
     ADMIN_ID,
-    `🔗 חיבורים אוטומטיים\n\n` +
+    `🔗 התאמות אוטומטיות\n\n` +
     `🏛 ${employer.org_type || "לשכה"}: ${employer.contact_name || ""}\n` +
     `👤 מועמדים: ${candidates.map((c) => c.full_name || "מועמד").join(", ")}`
   );
@@ -313,7 +313,7 @@ function scheduleCVFollowUp(candidateId, employerId, candidateName) {
       [employerId, candidateId]
     );
     const req = res.rows[0];
-    if (!req || req.status === "contacted" || req.status === "not_suitable") return;
+    if (!req || req.status === "connected" || req.status === "rejected") return;
 
     await bot.sendMessage(
       employerId,
@@ -420,7 +420,7 @@ async function findMatches(employer) {
   const fields = (employer.fields || "").split(", ");
 
   const rejectedRes = await query(
-    `SELECT candidate_id FROM cv_requests WHERE employer_id=$1 AND status='not_suitable'`,
+    `SELECT candidate_id FROM cv_requests WHERE employer_id=$1 AND status='rejected'`,
     [employer.telegram_id]
   );
   const rejectedIds = new Set(rejectedRes.rows.map((r) => r.candidate_id));
@@ -573,7 +573,7 @@ async function exportExcel() {
         "סטטוס": m.status === "closed" ? "סגור" : "פעיל",
       };
     };
-    XLSX.utils.book_append_sheet(wb, makeSheet("חיבורים — קוזו", MATCHES_HEADERS, matchesHistory.map(fmtM)), "חיבורים");
+    XLSX.utils.book_append_sheet(wb, makeSheet("התאמות — קוזו", MATCHES_HEADERS, matchesHistory.map(fmtM)), "התאמות");
 
     const outPath = path.join(__dirname, "../טבלה נתונים.xlsx");
     XLSX.writeFile(wb, outPath);
@@ -666,7 +666,7 @@ const CANDIDATE_STEPS = [
   { key: "has_license",       question: "יש רישיון רכב?",                                                                  type: "single", options: [["כן", "לא"]] },
   { key: "english_level",     question: "רמת אנגלית?",                                                                     type: "single", options: [["גבוהה", "בסיסית"], ["לא רלוונטי"]] },
   { key: "irregular_hours",   question: "מוכן/ה לשעות לא שגרתיות?",                                                       type: "single", options: [["כן", "לא"]] },
-  { key: "declaration",       question: "רק לידיעה. הפרטים ישמשו אותי לחיבורים בלבד. אין בזה התחייבות מאף צד 🤝", type: "single", options: [["מאשר ✅"]] },
+  { key: "declaration",       question: "רק לידיעה. הפרטים ישמשו אותי להתאמות בלבד. אין בזה התחייבות מאף צד 🤝", type: "single", options: [["מאשר ✅"]] },
 ];
 
 const EMPLOYER_STEPS = [
@@ -683,7 +683,7 @@ const EMPLOYER_STEPS = [
   { key: "english_required",     question: "נדרשת אנגלית?",                                                                 type: "single", options: [["ברמה גבוהה", "בסיסית"], ["לא נדרש"]] },
   { key: "irregular_hours",      question: "נדרשת זמינות לשעות לא שגרתיות?",                                               type: "single", options: [["כן", "לא"]] },
   { key: "future_search",        question: "האם תרצו להישאר במאגר לחיפושים עתידיים?",                                   type: "single", options: [["כן", "לא"]] },
-  { key: "declaration",          question: "רק לידיעה. הפרטים ישמשו לחיבור מקצועי בלבד. אין בזה התחייבות מאף צד 🤝", type: "single", options: [["מאשר ✅"]] },
+  { key: "declaration",          question: "רק לידיעה. הפרטים ישמשו להתאמה מקצועית בלבד. אין בזה התחייבות מאף צד 🤝", type: "single", options: [["מאשר ✅"]] },
 ];
 
 // שאלות עדכון למועמד שחוזר מהשהייה
@@ -930,7 +930,7 @@ bot.on("message", async (msg) => {
         "🗑 הסר [ID] — הסר משתמש לצמיתות\n" +
         "👥 יועצים — רשימת יועצים פעילים\n" +
         "🏛 מגייסים — רשימת מגייסים פעילים\n" +
-        "🔗 חיבורים — רשימת חיבורים פעילים"
+        "🔗 חיבורים — רשימת התאמות פעילות"
       );
       return;
     }
@@ -963,13 +963,13 @@ bot.on("message", async (msg) => {
     if (text === "חיבורים") {
       const res = await query(`SELECT candidate_name, employer_name, matched_at FROM matches WHERE status='active' ORDER BY matched_at DESC LIMIT 30`);
       if (res.rows.length === 0) {
-        await bot.sendMessage(chatId, "אין חיבורים פעילים כרגע.");
+        await bot.sendMessage(chatId, "אין התאמות פעילות כרגע.");
       } else {
         const lines = res.rows.map((r, i) => {
           const date = r.matched_at ? new Date(r.matched_at).toLocaleDateString("he-IL") : "—";
           return `${i + 1}. ${r.candidate_name || "—"} ↔ ${r.employer_name || "—"} (${date})`;
         }).join("\n");
-        await bot.sendMessage(chatId, `🔗 חיבורים פעילים (${res.rows.length}):\n\n${lines}`);
+        await bot.sendMessage(chatId, `🔗 התאמות פעילות (${res.rows.length}):\n\n${lines}`);
       }
       return;
     }
@@ -1267,7 +1267,7 @@ bot.on("callback_query", async (cbQuery) => {
     await query(
       `INSERT INTO cv_requests (employer_id, candidate_id)
        VALUES ($1, $2)
-       ON CONFLICT (employer_id, candidate_id) DO UPDATE SET requested_at=NOW(), status='pending', updated_at=NOW()`,
+       ON CONFLICT (employer_id, candidate_id) DO UPDATE SET requested_at=NOW(), status='matched', updated_at=NOW()`,
       [employerId, candidateId]
     );
     scheduleCVFollowUp(candidateId, employerId, candidate.full_name || "מועמד");
@@ -1294,8 +1294,8 @@ bot.on("callback_query", async (cbQuery) => {
       await bot.sendMessage(ADMIN_ID, `עדכון על ${candidateName} ↔ ${employerName}: עוד בתהליך ⏳`);
       scheduleCVFollowUp(candidateId, employerId, candidateName);
     } else {
-      const status = action === "CONTACTED" ? "contacted" : "not_suitable";
-      const label  = action === "CONTACTED" ? "יצר קשר ✅" : "לא מתאים ❌";
+      const status = action === "CONTACTED" ? "connected" : "rejected";
+      const label  = action === "CONTACTED" ? "חיבור מוצלח ✅" : "לא מתאים ❌";
       await query(
         `UPDATE cv_requests SET status=$3, updated_at=NOW() WHERE employer_id=$1 AND candidate_id=$2`,
         [employerId, candidateId, status]
@@ -1488,7 +1488,7 @@ bot.on("callback_query", async (cbQuery) => {
     const parts = data.split("_");
     const candidateId = Number(parts[2]);
     const employerId  = Number(parts[3]);
-    await bot.sendMessage(ADMIN_ID, "✅ נרשם. החיבור עדיין פעיל. נבדוק שוב בשבוע הבא.");
+    await bot.sendMessage(ADMIN_ID, "✅ נרשם. ההתאמה עדיין פעילה. נבדוק שוב בשבוע הבא.");
     // שלח follow-up נוסף בעוד שבוע
     scheduleFollowUp(candidateId, employerId);
     return;
@@ -1504,7 +1504,7 @@ bot.on("callback_query", async (cbQuery) => {
       [candidateId, employerId]
     );
     await exportExcel();
-    await bot.sendMessage(ADMIN_ID, "❌ נרשם. החיבור נסגר. המועמד לא יוצע לאותה לשכה שוב.");
+    await bot.sendMessage(ADMIN_ID, "❌ נרשם. ההתאמה נסגרה. המועמד לא יוצע לאותה לשכה שוב.");
     return;
   }
 
@@ -1651,7 +1651,7 @@ async function sendMonthlyReport() {
     ),
     query(`SELECT COUNT(DISTINCT telegram_id) FROM employers WHERE status='active'`),
     query(
-      `SELECT COUNT(*) FROM cv_requests WHERE status='contacted' AND updated_at >= $1`,
+      `SELECT COUNT(*) FROM cv_requests WHERE status='connected' AND updated_at >= $1`,
       [oneMonthAgo]
     ),
   ]);
@@ -1660,7 +1660,7 @@ async function sendMonthlyReport() {
     `📅 סיכום חודשי\n\n` +
     `יועצים ללא התאמה מעל חודש: ${noMatchRes.rows[0].count}\n` +
     `מגייסים פעילים: ${activeEmpRes.rows[0].count}\n` +
-    `חיבורים שהצליחו החודש: ${successRes.rows[0].count}`
+    `חיבורים מוצלחים החודש: ${successRes.rows[0].count}`
   );
 }
 
@@ -1686,7 +1686,7 @@ async function sendWeeklySummary() {
     `📊 סיכום שבוע\n\n` +
     `יועצים חדשים שנרשמו: ${newCandsRes.rows[0].count}\n` +
     `מגייסים חדשים שנרשמו: ${newEmpsRes.rows[0].count}\n` +
-    `חיבורים שבוצעו: ${matchesRes.rows[0].count}\n` +
+    `התאמות שבוצעו: ${matchesRes.rows[0].count}\n` +
     `קורות חיים שנפתחו: ${cvsRes.rows[0].count}`
   );
 }
@@ -1751,7 +1751,7 @@ async function sendStatus() {
     `🏛 *מגייסים*\n` +
     `פעילים: ${activeEmps}\n` +
     `מושהים: ${pausedEmps}\n\n` +
-    `🔗 *חיבורים*\n` +
+    `🔗 *התאמות*\n` +
     `סה"כ: ${matches.length}\n` +
     `השבוע: ${matchesWeek}\n\n` +
     `🎉 *מצאו עבודה*: ${archivedCount}`;
