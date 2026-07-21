@@ -47,6 +47,29 @@ async function archiveCandidate(telegramId) {
   );
 }
 
+// ── פרופיל מועמד ─────────────────────────────────────────────────────────────
+
+function buildProfileMessage(cand) {
+  const lines = [
+    "הפרופיל שלך 📋",
+    "",
+    `שם: ${cand.full_name || ""}`,
+    `מייל: ${cand.email || ""}`,
+    `עיר: ${cand.city || ""}`,
+    `תואר: ${cand.degree || ""} — ${cand.field_of_study || ""}`,
+    `שפות: ${cand.languages || ""}`,
+    `ניסיון: ${cand.experience || ""}`,
+    `תחומים: ${cand.interests || ""}`,
+    `מקום מועדף: ${cand.workplace_pref || ""}`,
+    `היקף: ${cand.availability || ""}`,
+    `צד פוליטי: ${cand.political_side || ""}`,
+    `סטטוס: ${cand.status === "active" ? "פעיל ✅" : cand.status}`,
+    "",
+    "לעדכון פרטים — כתוב עדכן פרטים",
+  ];
+  return lines.join("\n");
+}
+
 // ── המלצות ───────────────────────────────────────────────────────────────────
 
 async function getRecommendation(candidateId) {
@@ -882,6 +905,14 @@ async function finishSession(chatId, session) {
         `העברתי את הפרטים שלך ל-${matchingEmployers.length} גופים שנראים לי מתאימים.\nברגע שיירשמו עוד גופים מתאימים — תשמע ממני 🤝`
       );
     }
+    // פרופיל מלא
+    const savedCand = await getCandidateRecord(chatId);
+    if (savedCand) {
+      await bot.sendMessage(chatId, buildProfileMessage(savedCand), {
+        reply_markup: { inline_keyboard: [[{ text: "✏️ עדכן פרטים", callback_data: "UPDATE_PROFILE" }]] },
+      });
+    }
+
     // הפניית חברים
     await bot.sendMessage(
       chatId,
@@ -1213,6 +1244,18 @@ bot.on("message", async (msg) => {
       return;
     }
 
+    if (lower.includes("הפרופיל שלי")) {
+      const cand = await getCandidateRecord(chatId);
+      if (cand) {
+        await bot.sendMessage(chatId, buildProfileMessage(cand), {
+          reply_markup: { inline_keyboard: [[{ text: "✏️ עדכן פרטים", callback_data: "UPDATE_PROFILE" }]] },
+        });
+      } else {
+        await bot.sendMessage(chatId, "לא מצאתי פרופיל. אם עוד לא נרשמת — כתוב /start");
+      }
+      return;
+    }
+
     if (lower.includes("עדכן פרטים")) {
       sessions[chatId] = { ...newSession("update", msg.from?.username || ""), stage: "updating" };
       await bot.sendMessage(chatId, "יאללה, נעדכן את הפרטים שלך");
@@ -1479,6 +1522,13 @@ bot.on("callback_query", async (cbQuery) => {
         scheduleRatingRequest(employerId, candidateId, candidateName);
       }
     }
+    return;
+  }
+
+  if (data === "UPDATE_PROFILE") {
+    sessions[chatId] = { ...newSession("update", msg.from?.username || ""), stage: "updating" };
+    await bot.sendMessage(chatId, "יאללה, נעדכן את הפרטים שלך");
+    await sendStep(chatId, sessions[chatId]);
     return;
   }
 
