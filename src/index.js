@@ -704,7 +704,7 @@ async function exportExcel() {
         "שם מגייס": emp?.contact_name || `ID:${r.employer_id}`,
         "גוף":      emp?.org_type     || "",
         "דירוג":    rating ? "⭐".repeat(rating.stars) : "",
-        "מקור":     "",
+        "מקור":     cand?.job_source === "kozo" ? "דרך קוזו 🤝" : cand?.job_source === "other" ? "ממקום אחר" : "",
       };
     };
     XLSX.utils.book_append_sheet(wb, makeSheet("חיבורים מוצלחים — קוזו", CONNECTED_HEADERS, connected.map(fmtConn)), "חיבורים מוצלחים");
@@ -1630,6 +1630,7 @@ bot.on("callback_query", async (cbQuery) => {
     const candidateId = Number(parts[3]);
     const cand = await getCandidateRecord(candidateId);
     const name = cand?.full_name || `ID:${candidateId}`;
+    await query(`UPDATE candidates SET job_source=$1 WHERE telegram_id=$2`, [source, candidateId]);
     await archiveCandidate(candidateId);
     await exportExcel();
     await bot.sendMessage(chatId, "כיף לשמוע! 🎉 בהצלחה בתפקיד החדש. אם אי פעם תרצו לחזור — /start תמיד פתוח");
