@@ -595,16 +595,20 @@ function calcMatchScore(candidate, employer) {
 
 async function exportExcel() {
   try {
-    const [candidatesRes, employersRes, matchesRes, accessRes] = await Promise.all([
+    const [candidatesRes, employersRes, matchesRes, accessRes, connectedRes, ratingsRes] = await Promise.all([
       query(`SELECT * FROM candidates ORDER BY created_at ASC`),
       query(`SELECT * FROM employers ORDER BY created_at ASC`),
       query(`SELECT * FROM matches ORDER BY matched_at ASC`),
       query(`SELECT * FROM access_requests ORDER BY timestamp ASC`),
+      query(`SELECT * FROM cv_requests WHERE status='connected' ORDER BY updated_at DESC`),
+      query(`SELECT * FROM ratings`),
     ]);
     const candidates = candidatesRes.rows;
     const employers  = employersRes.rows;
     const matchesHistory = matchesRes.rows;
     const accessRequests = accessRes.rows;
+    const connected  = connectedRes.rows;
+    const ratings    = ratingsRes.rows;
 
     const CANDIDATE_HEADERS = ["תאריך","טלגרם","שם מלא","נייד","מייל","עיר","תואר","תחום לימודים","שפות","עבר התמחות","ניסיון","תחומי עניין","מקום עבודה מועדף","זמינות","קורות חיים","מוטיבציה","הצהרה","סטטוס","הוצע ל"];
     const EMPLOYER_HEADERS  = ["תאריך","טלגרם","מטעם","שם ותפקיד","נייד","מייל","תחומים","היקף","תזמון","חשיבות ניסיון","הערות","הצהרה","סטטוס"];
@@ -687,6 +691,23 @@ async function exportExcel() {
       };
     };
     XLSX.utils.book_append_sheet(wb, makeSheet("התאמות — קוזו", MATCHES_HEADERS, matchesHistory.map(fmtM)), "התאמות");
+
+    // גיליון חיבורים מוצלחים
+    const CONNECTED_HEADERS = ["תאריך חיבור", "שם יועץ", "שם מגייס", "גוף", "דירוג", "מקור"];
+    const fmtConn = (r) => {
+      const cand = candidates.find((c) => c.telegram_id === r.candidate_id);
+      const emp  = employers.find((e) => e.telegram_id === r.employer_id);
+      const rating = ratings.find((rt) => rt.employer_id === r.employer_id && rt.candidate_id === r.candidate_id);
+      return {
+        "תאריך חיבור": r.updated_at ? new Date(r.updated_at).toLocaleString("he-IL") : "",
+        "שם יועץ":  cand?.full_name   || `ID:${r.candidate_id}`,
+        "שם מגייס": emp?.contact_name || `ID:${r.employer_id}`,
+        "גוף":      emp?.org_type     || "",
+        "דירוג":    rating ? "⭐".repeat(rating.stars) : "",
+        "מקור":     "",
+      };
+    };
+    XLSX.utils.book_append_sheet(wb, makeSheet("חיבורים מוצלחים — קוזו", CONNECTED_HEADERS, connected.map(fmtConn)), "חיבורים מוצלחים");
 
     const outPath = path.join(__dirname, "../טבלה נתונים.xlsx");
     XLSX.writeFile(wb, outPath);
