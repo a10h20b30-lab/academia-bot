@@ -289,7 +289,7 @@ async function sendMatchSummary(candidates, employer, notifyCandidates = true) {
 
   await bot.sendMessage(
     employerId,
-    `מצאתי ${candidates.length} מועמדים שנראים לי מתאימים 👋`,
+    `מצאתי ${candidates.length} מועמדים שנראים לי מתאימים 👋\n\nברגע שיירשמו עוד מתאימים — תקבלו עדכון נוסף 🤝`,
     { reply_markup: { inline_keyboard: keyboard } }
   );
 
@@ -794,12 +794,12 @@ async function finishSession(chatId, session) {
     if (matchingEmployers.length > 0) {
       await bot.sendMessage(
         chatId,
-        `👋 קוזו עובד בשבילך!\n\nהעברתי את הפרטים שלך ל-${matchingEmployers.length} לשכות/גופים שנראים לי מתאימים.\nאם יתאים — ייצרו איתך קשר 🤝`
+        `העברתי את הפרטים שלך ל-${matchingEmployers.length} גופים שנראים לי מתאימים.\nברגע שיירשמו עוד גופים מתאימים — תשמע ממני 🤝`
       );
     } else {
       await bot.sendMessage(
         chatId,
-        `👋 קוזו כאן!\nהפרופיל שלך נשמר במאגר. ברגע שתהיה התאמה, תשמעו ממני 🤝`
+        "הפרופיל שלך נשמר. ברגע שיהיה מישהו מתאים — תשמע ממני 🤝"
       );
     }
   } else {
