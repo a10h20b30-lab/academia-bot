@@ -155,7 +155,7 @@ async function getEmployerRecord(telegramId) {
 async function updateCandidateRecord(telegramId, updates) {
   const ALLOWED_COLUMNS = [
     "full_name", "phone", "email", "city", "degree", "field_of_study",
-    "languages", "is_intern", "internship_mentor", "internship_phone",
+    "languages", "is_intern", "internship_mentor",
     "experience", "interests", "workplace_pref", "timing", "availability",
     "cv", "motivation", "has_references", "references", "declaration", "status",
     "availability_status"
@@ -221,31 +221,30 @@ async function saveRecord(type, chatId, username, data) {
       `INSERT INTO candidates (
         telegram_id, telegram_username,
         full_name, phone, email, city, degree, field_of_study,
-        languages, is_intern, internship_mentor, internship_phone,
+        languages, is_intern, internship_mentor,
         experience, interests, workplace_pref, timing, availability,
         cv, motivation, has_references, "references",
-        political_side, has_license, english_level, irregular_hours, declaration,
+        political_side, has_license, declaration,
         availability_status
       ) VALUES (
         $1, $2,
         $3, $4, $5, $6, $7, $8,
-        $9, $10, $11, $12,
-        $13, $14, $15, $16, $17,
-        $18, $19, $20, $21,
-        $22, $23, $24, $25, $26,
-        $27
+        $9, $10, $11,
+        $12, $13, $14, $15, $16,
+        $17, $18, $19, $20,
+        $21, $22, $23,
+        $24
       )`,
       [
         chatId, username || "",
         data.full_name || "", data.phone || "", data.email || "",
         data.city || "", data.degree || "", data.field_of_study || "",
         data.languages || "", data.is_intern || "", data.internship_mentor || "",
-        data.internship_phone || "", data.experience || "", data.interests || "",
+        data.experience || "", data.interests || "",
         data.workplace_pref || "", data.timing || "", data.availability || "",
         data.cv || "", data.motivation || "", data.has_references || "",
         data.references || "",
-        data.political_side || "", data.has_license || "", data.english_level || "",
-        data.irregular_hours || "", data.declaration || "",
+        data.political_side || "", data.has_license || "", data.declaration || "",
         data.availability_status || "",
       ]
     );
@@ -765,9 +764,8 @@ const CANDIDATE_STEPS = [
   { key: "field_of_study",    question: "מה תחום הלימודים?",                                                                    type: "text"   },
   { key: "languages",         question: "באילו שפות יש שליטה?\nאפשר לסמן כמה ולחץ סיום ✓",                                  type: "multi",  options: [["עברית", "אנגלית"], ["ערבית", "רוסית"], ["אחר", "סיום ✓"]] },
   { key: "is_intern",         question: "האם עברת התמחות בכנסת?",                                                               type: "single", options: [["כן ✅", "לא ❌"]] },
-  { key: "internship_mentor", question: "שם הדובר/ת שאצלו/ה התמחית",                                                            type: "text",   conditional: "is_intern=כן ✅" },
-  { key: "internship_phone",  question: "מה מספר הנייד שלו/ה?",                                                                 type: "text",   conditional: "is_intern=כן ✅" },
-  { key: "experience",        question: "נשמח לשמוע על הדרך שלך עד כה",                                    type: "text"   },
+  { key: "internship_mentor", question: "שם ונייד הדובר/ת שאצלו/ה התמחית",                                                       type: "text",   conditional: "is_intern=כן ✅" },
+  { key: "experience",        question: "ספר/י על הניסיון המקצועי שלך — תפקידים, מקומות עבודה, מה עשית", type: "text"   },
   { key: "interests",         question: "באילו תחומים יש התמחות או עניין?\nאפשר לסמן כמה ולחץ סיום ✓",                      type: "multi",  options: [["ייעוץ פרלמנטרי", "דוברות"], ["סושיאל ורשתות חברתיות", "יועץ פוליטי"], ["עריכת וידאו", "סיום ✓"]] },
   { key: "workplace_pref",    question: "איפה מעדיפים לעבוד?",                                                                type: "single", options: [["כנסת", "עירייה"], ["שניהם"]] },
   { key: "timing",            question: "מתי פנוי להתחיל?",                                                                 type: "single", options: [["מיידי", "בחודש הקרוב"], ["גמיש / פתוח"]] },
@@ -778,8 +776,6 @@ const CANDIDATE_STEPS = [
   { key: "references",        question: "ציין שם ונייד של הממליצים (אפשר כמה, מופרדים בשורות)",                         type: "text",   conditional: "has_references=כן ✅" },
   { key: "political_side",    question: "עם איזה צד פוליטי תרצה לעבוד?",                                                  type: "single", options: [["קואליציה", "אופוזיציה"], ["שניהם"]] },
   { key: "has_license",       question: "יש רישיון רכב?",                                                                  type: "single", options: [["כן", "לא"]] },
-  { key: "english_level",     question: "רמת אנגלית?",                                                                     type: "single", options: [["גבוהה", "בסיסית"], ["לא רלוונטי"]] },
-  { key: "irregular_hours",   question: "מוכן/ה לשעות לא שגרתיות?",                                                       type: "single", options: [["כן", "לא"]] },
   { key: "availability_status", question: "מה מצב החיפוש שלך?", type: "single", options: [["🟢 מחפש באופן פעיל", "🟡 פתוח להצעות"], ["⚪ לא מחפש כרגע"]] },
   { key: "declaration",       question: "רק לידיעה. הפרטים ישמשו אותי להתאמות בלבד. אין בזה התחייבות מאף צד 🤝", type: "single", options: [["מאשר ✅"]] },
 ];
@@ -889,12 +885,11 @@ async function finishSession(chatId, session) {
     }
 
     // שלח לאדמין טקסט מוכן לשליחה לדובר (אם יש)
-    if (session.data.internship_mentor && session.data.internship_phone) {
+    if (session.data.internship_mentor) {
       const mentorMsg =
         `📋 *בקשת המלצה*\n\n` +
         `המועמד ${session.data.full_name} ציין שהתמחה אצל:\n` +
-        `👤 ${session.data.internship_mentor}\n` +
-        `📱 ${session.data.internship_phone}\n\n` +
+        `👤 ${session.data.internship_mentor}\n\n` +
         `*טקסט מוכן לשליחה בוואטסאפ:*\n` +
         `שלום, אני קוזו.\n` +
         `${session.data.full_name} שהתמחה אצלך ציין אותך בפרופיל שלו/ה.\n` +
@@ -981,46 +976,6 @@ async function finishSession(chatId, session) {
 bot.onText(/\/start/, async (msg) => {
   const chatId = msg.chat.id;
   chatHistories[chatId] = [];
-
-  // בדוק אם יש מועמד שמחכה להמלצה מהמשתמש הזה
-  const recRes = await query(
-    `SELECT * FROM candidates WHERE internship_phone IS NOT NULL AND internship_phone != '' AND status != 'archived'`
-  );
-  const allCandidates = recRes.rows;
-  const waitingForRec = allCandidates.find(
-    (c) => c.internship_phone &&
-           normalizePhone(c.internship_phone) === String(chatId) &&
-           true // recommendation check is done async below
-  );
-
-  // additional check: no recommendation yet
-  let recCandidate = null;
-  for (const c of allCandidates) {
-    if (normalizePhone(c.internship_phone) === String(chatId)) {
-      const existingRec = await getRecommendation(c.telegram_id);
-      if (!existingRec) {
-        recCandidate = c;
-        break;
-      }
-    }
-  }
-
-  if (recCandidate) {
-    sessions[chatId] = { stage: "awaiting_recommendation", candidateId: recCandidate.telegram_id, candidateName: recCandidate.full_name };
-    await bot.sendMessage(
-      chatId,
-      `שלום! 👋\n${recCandidate.full_name} הזכיר אותך כמי שהשפיע עליו/ה.\nכמה מילים ממך יכולות לעשות הבדל. תרצה/י להמליץ?`,
-      {
-        reply_markup: {
-          inline_keyboard: [[
-            { text: "כן, אשמח להמליץ ✅", callback_data: `REC_YES_${recCandidate.telegram_id}` },
-            { text: "לא תודה ❌",          callback_data: `REC_NO_${recCandidate.telegram_id}`  },
-          ]],
-        },
-      }
-    );
-    return;
-  }
 
   // זיהוי רישום כפול
   const existingCandidate = await getCandidateRecord(chatId);
