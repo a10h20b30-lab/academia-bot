@@ -738,6 +738,7 @@ async function sendStep(chatId, session) {
 }
 
 async function finishSession(chatId, session) {
+  try {
   if (session.type === "update") {
     // עדכון פרטים ומחזיר לפעילות
     await updateCandidateRecord(chatId, session.data);
@@ -819,6 +820,11 @@ async function finishSession(chatId, session) {
   }
   await exportExcel();
   delete sessions[chatId];
+  } catch (err) {
+    console.error("finishSession error:", err);
+    try { await bot.sendMessage(chatId, "משהו השתבש, נסה שוב 🙏"); } catch (_) {}
+    try { await bot.sendMessage(ADMIN_ID, `❌ שגיאה ב-finishSession (ID: ${chatId})\n${err.message}`); } catch (_) {}
+  }
 }
 
 // ── /start ────────────────────────────────────────────────────────────────────
@@ -1146,6 +1152,7 @@ bot.on("callback_query", async (cbQuery) => {
   const chatId = cbQuery.message.chat.id;
   const data   = cbQuery.data;
   try { await bot.answerCallbackQuery(cbQuery.id); } catch (_) {}
+  try {
 
   // בקשת הצטרפות — התחל שאלון
   if (data === "REQUEST_ACCESS") {
@@ -1509,6 +1516,12 @@ bot.on("callback_query", async (cbQuery) => {
         await bot.sendMessage(chatId, `➖ ${data} הוסר`);
       }
     }
+  }
+
+  } catch (err) {
+    console.error("callback_query error:", err);
+    try { await bot.sendMessage(chatId, "משהו השתבש, נסה שוב 🙏"); } catch (_) {}
+    try { await bot.sendMessage(ADMIN_ID, `❌ שגיאה ב-callback_query (ID: ${chatId}, data: ${data})\n${err.message}`); } catch (_) {}
   }
 });
 
