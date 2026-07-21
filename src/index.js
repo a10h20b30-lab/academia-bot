@@ -13,7 +13,30 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 const ADMIN_ID = 6021652936;
 const ADMIN_PHONE_LINK = "https://wa.me/972548028082?text=%D7%94%D7%99%D7%99%20%D7%90%D7%A0%D7%99%20%D7%9E%D7%A2%D7%95%D7%A0%D7%99%D7%99%D7%9F%20%D7%9C%D7%A7%D7%91%D7%9C%20%D7%A7%D7%95%D7%93%20%D7%9Ckozo"; // לינק לוואטסאפ עם הודעה מוכנה
-const EMPLOYER_ACCESS_CODE = "KOZO8"; // קוד האישור הקבוע ללשכות/עיריות
+let EMPLOYER_ACCESS_CODE = "KOZO8"; // קוד האישור הקבוע ללשכות/עיריות
+
+// ── בדיקת API key ────────────────────────────────────────────────────────────
+
+async function checkAnthropicKey() {
+  try {
+    await anthropic.messages.create({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 10,
+      messages: [{ role: "user", content: "ping" }],
+    });
+  } catch (err) {
+    try {
+      await bot.sendMessage(ADMIN_ID, "⚠️ מפתח Anthropic לא תקין — שיחה חופשית לא תעבוד");
+    } catch (_) {}
+  }
+}
+
+function scheduleApiHealthCheck() {
+  setTimeout(async () => {
+    await checkAnthropicKey();
+    scheduleApiHealthCheck();
+  }, 60 * 60 * 1000);
+}
 
 // ── ארכיון ───────────────────────────────────────────────────────────────────
 
@@ -285,6 +308,7 @@ async function sendMatchSummary(candidates, employer, notifyCandidates = true) {
     text: `📎 קורות חיים של ${c.full_name || "מועמד"}`,
     callback_data: `CV_${c.telegram_id}_${employerId}`,
   }]));
+  keyboard.push([{ text: "🔄 הצג עוד מועמדים", callback_data: `REFRESH_MATCHES_${employerId}` }]);
   keyboard.push([{ text: "הפסק לקבל הצעות 🔕", callback_data: `STOP_OFFERS_EMPLOYER_${employerId}` }]);
 
   await bot.sendMessage(
@@ -329,6 +353,28 @@ function scheduleCVFollowUp(candidateId, employerId, candidateName) {
       }
     );
   }, delay);
+}
+
+// ── ביקורת אחרי חיבור מוצלח ─────────────────────────────────────────────────
+
+function scheduleRatingRequest(employerId, candidateId, candidateName) {
+  setTimeout(async () => {
+    try {
+      await bot.sendMessage(
+        employerId,
+        `איך יצא החיבור עם ${candidateName}? ⭐`,
+        {
+          reply_markup: {
+            inline_keyboard: [[
+              { text: "⭐⭐⭐⭐⭐", callback_data: `RATING_5_${employerId}_${candidateId}` },
+              { text: "⭐⭐⭐",    callback_data: `RATING_3_${employerId}_${candidateId}` },
+              { text: "⭐",       callback_data: `RATING_1_${employerId}_${candidateId}` },
+            ]],
+          },
+        }
+      );
+    } catch (_) {}
+  }, 3 * 24 * 60 * 60 * 1000);
 }
 
 // ── פידבק ומעקב אוטומטי ──────────────────────────────────────────────────────
@@ -744,8 +790,19 @@ async function finishSession(chatId, session) {
     await updateCandidateRecord(chatId, session.data);
     await resumeCandidate(chatId);
     await exportExcel();
-    await bot.sendMessage(chatId, "מעודכן! 🤝\nחזרת לרשימה. ברגע שתהיה התאמה, אחבר.");
     await bot.sendMessage(ADMIN_ID, `🔄 מועמד חזר לפעילות (ID: ${chatId})\n${JSON.stringify(session.data, null, 2)}`);
+
+    // חיפוש מחדש — מגייסים שמתאימים לפרופיל המעודכן
+    const updatedCandidate = await getCandidateRecord(chatId);
+    const matchingEmployers = updatedCandidate ? await findMatchingEmployers(updatedCandidate) : [];
+    for (const employer of matchingEmployers) {
+      await sendMatchSummary([updatedCandidate], employer, false);
+    }
+    if (matchingEmployers.length > 0) {
+      await bot.sendMessage(chatId, `מעודכן! 🤝\nהעברתי את הפרופיל המעודכן שלך ל-${matchingEmployers.length} גופים מתאימים.`);
+    } else {
+      await bot.sendMessage(chatId, "מעודכן! 🤝\nחזרת לרשימה. ברגע שתהיה התאמה, אחבר.");
+    }
     delete sessions[chatId];
     return;
   }
@@ -930,6 +987,16 @@ bot.on("message", async (msg) => {
         "📞 יצירת קשר — מגייסים שלחצו קורות חיים\n" +
         "🔗 חיבורים — מגייסים שאישרו יצירת קשר"
       );
+      return;
+    }
+    if (text.startsWith("שנה קוד ")) {
+      const newCode = text.replace("שנה קוד ", "").trim();
+      if (newCode) {
+        EMPLOYER_ACCESS_CODE = newCode;
+        await bot.sendMessage(chatId, `קוד עודכן ל-${newCode} ✅`);
+      } else {
+        await bot.sendMessage(chatId, "פורמט: שנה קוד [קוד חדש]");
+      }
       return;
     }
     if (text === "טבלה") { await sendExcel(); return; }
@@ -1320,6 +1387,9 @@ bot.on("callback_query", async (cbQuery) => {
     } else if (candidate.cv.startsWith("photo_id:")) {
       await bot.sendPhoto(chatId, candidate.cv.replace("photo_id:", ""), { caption: `קורות חיים — ${candidate.full_name || "מועמד"}` });
     }
+    if (!candidate.phone) {
+      await bot.sendMessage(chatId, `ליצירת קשר ישירה עם ${candidate.full_name || "המועמד"} — פנו לקוזו: wa.me/972548028082`);
+    }
     await query(
       `INSERT INTO cv_requests (employer_id, candidate_id)
        VALUES ($1, $2)
@@ -1358,6 +1428,9 @@ bot.on("callback_query", async (cbQuery) => {
       );
       await bot.sendMessage(chatId, "תודה על העדכון 🙏");
       await bot.sendMessage(ADMIN_ID, `עדכון על ${candidateName} ↔ ${employerName}: ${label}`);
+      if (action === "CONTACTED") {
+        scheduleRatingRequest(employerId, candidateId, candidateName);
+      }
     }
     return;
   }
@@ -1503,6 +1576,42 @@ bot.on("callback_query", async (cbQuery) => {
       return;
     }
 
+    return;
+  }
+
+  // ביקורת חיבור
+  if (data.startsWith("RATING_")) {
+    const parts = data.split("_");
+    const stars      = Number(parts[1]);
+    const employerId = Number(parts[2]);
+    const candidateId = Number(parts[3]);
+    const candidate  = await getCandidateRecord(candidateId);
+    const employer   = await getEmployerRecord(employerId);
+    await query(
+      `INSERT INTO ratings (employer_id, candidate_id, stars)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (employer_id, candidate_id) DO UPDATE SET stars=$3, created_at=NOW()`,
+      [employerId, candidateId, stars]
+    );
+    await bot.sendMessage(chatId, "תודה על הפידבק! 🙏");
+    await bot.sendMessage(
+      ADMIN_ID,
+      `⭐ דירוג חיבור\n\n${employer?.contact_name || "לשכה"} דירג את ${candidate?.full_name || "מועמד"}: ${"⭐".repeat(stars)}`
+    );
+    return;
+  }
+
+  // רענון התאמות — מגייס מבקש עוד מועמדים
+  if (data.startsWith("REFRESH_MATCHES_")) {
+    const employerId = Number(data.replace("REFRESH_MATCHES_", ""));
+    const employer   = await getEmployerRecord(employerId);
+    if (!employer) { await bot.sendMessage(chatId, "לא מצאתי את הפרופיל שלכם 🙏"); return; }
+    const matches = await findMatches(employer);
+    if (matches.length > 0) {
+      await sendMatchSummary(matches, employer, true);
+    } else {
+      await bot.sendMessage(chatId, "אין עדיין מועמדים נוספים מתאימים. ברגע שיירשם מישהו — תקבלו עדכון 🤝");
+    }
     return;
   }
 
@@ -1833,5 +1942,7 @@ async function sendExcel() {
   }
   scheduleMonthlyReport();
   scheduleWeeklySummary();
+  await checkAnthropicKey();
+  scheduleApiHealthCheck();
   console.log("🟢 קוזו bot פועל בטלגרם...");
 })();

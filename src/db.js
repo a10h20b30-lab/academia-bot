@@ -168,5 +168,16 @@ export async function initDB() {
   await query(`UPDATE cv_requests SET status='connected' WHERE status='contacted'`);
   await query(`UPDATE cv_requests SET status='rejected'  WHERE status='not_suitable'`);
 
+  await query(`
+    CREATE TABLE IF NOT EXISTS ratings (
+      id SERIAL PRIMARY KEY,
+      employer_id BIGINT,
+      candidate_id BIGINT,
+      stars INTEGER,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(employer_id, candidate_id)
+    )
+  `);
+
   console.log("✅ DB tables initialized");
 }
