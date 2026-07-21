@@ -588,7 +588,7 @@ function formatRecord(type, session) {
   if (type === "candidate") {
     return `שם: ${d.full_name}\nטלפון: ${d.phone}\nמייל: ${d.email}\nעיר: ${d.city}\nתואר: ${d.degree}\nלמד: ${d.field_of_study}\nשפות: ${d.languages}\nעבר התמחות: ${d.is_intern}\nניסיון: ${d.experience}\nתחומים: ${d.interests}\nמקום עבודה מועדף: ${d.workplace_pref}\nמועד: ${d.timing}\nזמינות: ${d.availability}\nמוטיבציה: ${d.motivation}`;
   } else {
-    return `מטעם: ${d.org_type}\nאיש קשר: ${d.contact_name}\nטלפון: ${d.phone}\nמייל: ${d.email}\nתחום: ${d.fields}\nמועד: ${d.timing}\nהיקף: ${d.availability}\nניסיון: ${d.experience_importance}\nדגשים: ${d.notes}`;
+    return `מטעם: ${d.org_type}\nשם: ${d.contact_name}\nטלפון: ${d.phone}\nמייל: ${d.email}\nתחום: ${d.fields}\nצד פוליטי: ${d.political_side || "לא צוין"}\nמועד: ${d.timing}\nהיקף: ${d.availability}\nניסיון: ${d.experience_importance}\nדגשים: ${d.notes}`;
   }
 }
 
@@ -802,10 +802,6 @@ async function finishSession(chatId, session) {
       );
     }
   } else {
-    await bot.sendMessage(
-      chatId,
-      "נרשם 🤝\nיש לי אנשים שנראים לי מתאימים — אחבר ברגע שיהיה נכון\n\nקוזו"
-    );
     await bot.sendMessage(ADMIN_ID, `📥 לשכה חדשה נרשמה!\n\n${formatRecord("employer", session)}`);
 
     // חיפוש התאמות מיידי — חיבור אוטומטי
@@ -814,6 +810,11 @@ async function finishSession(chatId, session) {
     const matches = await findMatches(employerForMatch);
     if (matches.length > 0) {
       await sendMatchSummary(matches, employerForMatch, true);
+    } else {
+      await bot.sendMessage(
+        chatId,
+        "אין עדיין יועצים מתאימים במאגר. ברגע שיירשם מישהו מתאים — תקבלו הודעה."
+      );
     }
   }
   await exportExcel();
