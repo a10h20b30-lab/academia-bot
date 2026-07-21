@@ -924,13 +924,11 @@ bot.on("message", async (msg) => {
         "📊 סטטוס — נתונים כלליים\n" +
         "📋 טבלה — קובץ Excel מלא\n" +
         "📢 הודעה — שלח הודעה לקהל\n" +
-        "🔍 חפש [שם] — חפש משתמש במאגר\n" +
-        "⏸ השהה [ID] — השהה משתמש\n" +
-        "▶️ הפעל [ID] — החזר משתמש לפעילות\n" +
-        "🗑 הסר [ID] — הסר משתמש לצמיתות\n" +
-        "👥 יועצים — רשימת יועצים פעילים\n" +
+        "👤 יועצים — רשימת יועצים פעילים\n" +
         "🏛 מגייסים — רשימת מגייסים פעילים\n" +
-        "🔗 חיבורים — רשימת התאמות פעילות"
+        "🎯 התאמות — מגייסים שקיבלו רשימת מועמדים\n" +
+        "📞 יצירת קשר — מגייסים שלחצו קורות חיים\n" +
+        "🔗 חיבורים — מגייסים שאישרו יצירת קשר"
       );
       return;
     }
@@ -960,16 +958,63 @@ bot.on("message", async (msg) => {
       }
       return;
     }
-    if (text === "חיבורים") {
-      const res = await query(`SELECT candidate_name, employer_name, matched_at FROM matches WHERE status='active' ORDER BY matched_at DESC LIMIT 30`);
+    if (text === "התאמות") {
+      const res = await query(
+        `SELECT e.contact_name, e.org_type, COUNT(m.id) AS match_count, MAX(m.matched_at) AS last_match
+         FROM matches m
+         JOIN employers e ON e.telegram_id = m.employer_id
+         WHERE m.status='active'
+         GROUP BY e.contact_name, e.org_type
+         ORDER BY last_match DESC LIMIT 30`
+      );
       if (res.rows.length === 0) {
         await bot.sendMessage(chatId, "אין התאמות פעילות כרגע.");
       } else {
         const lines = res.rows.map((r, i) => {
-          const date = r.matched_at ? new Date(r.matched_at).toLocaleDateString("he-IL") : "—";
-          return `${i + 1}. ${r.candidate_name || "—"} ↔ ${r.employer_name || "—"} (${date})`;
+          const date = r.last_match ? new Date(r.last_match).toLocaleDateString("he-IL") : "—";
+          return `${i + 1}. ${r.contact_name || "—"} (${r.org_type || "—"}) — ${r.match_count} מועמדים | ${date}`;
         }).join("\n");
-        await bot.sendMessage(chatId, `🔗 התאמות פעילות (${res.rows.length}):\n\n${lines}`);
+        await bot.sendMessage(chatId, `🎯 מגייסים עם התאמות (${res.rows.length}):\n\n${lines}`);
+      }
+      return;
+    }
+    if (text === "יצירת קשר") {
+      const res = await query(
+        `SELECT e.contact_name, e.org_type, c.full_name AS candidate_name, cr.requested_at, cr.status
+         FROM cv_requests cr
+         JOIN employers e ON e.telegram_id = cr.employer_id
+         JOIN candidates c ON c.telegram_id = cr.candidate_id
+         ORDER BY cr.requested_at DESC LIMIT 30`
+      );
+      if (res.rows.length === 0) {
+        await bot.sendMessage(chatId, "אין יצירות קשר כרגע.");
+      } else {
+        const statusLabel = (s) => s === "connected" ? "חיבור מוצלח ✅" : s === "rejected" ? "לא מתאים ❌" : s === "in_progress" ? "בתהליך ⏳" : "פתוח";
+        const lines = res.rows.map((r, i) => {
+          const date = r.requested_at ? new Date(r.requested_at).toLocaleDateString("he-IL") : "—";
+          return `${i + 1}. ${r.contact_name || "—"} → ${r.candidate_name || "—"} | ${statusLabel(r.status)} | ${date}`;
+        }).join("\n");
+        await bot.sendMessage(chatId, `📞 יצירות קשר (${res.rows.length}):\n\n${lines}`);
+      }
+      return;
+    }
+    if (text === "חיבורים") {
+      const res = await query(
+        `SELECT e.contact_name, e.org_type, c.full_name AS candidate_name, cr.updated_at
+         FROM cv_requests cr
+         JOIN employers e ON e.telegram_id = cr.employer_id
+         JOIN candidates c ON c.telegram_id = cr.candidate_id
+         WHERE cr.status='connected'
+         ORDER BY cr.updated_at DESC LIMIT 30`
+      );
+      if (res.rows.length === 0) {
+        await bot.sendMessage(chatId, "אין חיבורים מוצלחים כרגע.");
+      } else {
+        const lines = res.rows.map((r, i) => {
+          const date = r.updated_at ? new Date(r.updated_at).toLocaleDateString("he-IL") : "—";
+          return `${i + 1}. ${r.contact_name || "—"} (${r.org_type || "—"}) → ${r.candidate_name || "—"} | ${date}`;
+        }).join("\n");
+        await bot.sendMessage(chatId, `🔗 חיבורים מוצלחים (${res.rows.length}):\n\n${lines}`);
       }
       return;
     }
