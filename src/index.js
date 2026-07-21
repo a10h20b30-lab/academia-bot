@@ -156,7 +156,8 @@ async function updateCandidateRecord(telegramId, updates) {
     "full_name", "phone", "email", "city", "degree", "field_of_study",
     "languages", "is_intern", "internship_mentor", "internship_phone",
     "experience", "interests", "workplace_pref", "timing", "availability",
-    "cv", "motivation", "has_references", "references", "declaration", "status"
+    "cv", "motivation", "has_references", "references", "declaration", "status",
+    "availability_status"
   ];
   const keys = Object.keys(updates).filter((k) => ALLOWED_COLUMNS.includes(k));
   if (keys.length === 0) return;
@@ -222,14 +223,16 @@ async function saveRecord(type, chatId, username, data) {
         languages, is_intern, internship_mentor, internship_phone,
         experience, interests, workplace_pref, timing, availability,
         cv, motivation, has_references, "references",
-        political_side, has_license, english_level, irregular_hours, declaration
+        political_side, has_license, english_level, irregular_hours, declaration,
+        availability_status
       ) VALUES (
         $1, $2,
         $3, $4, $5, $6, $7, $8,
         $9, $10, $11, $12,
         $13, $14, $15, $16, $17,
         $18, $19, $20, $21,
-        $22, $23, $24, $25, $26
+        $22, $23, $24, $25, $26,
+        $27
       )`,
       [
         chatId, username || "",
@@ -242,6 +245,7 @@ async function saveRecord(type, chatId, username, data) {
         data.references || "",
         data.political_side || "", data.has_license || "", data.english_level || "",
         data.irregular_hours || "", data.declaration || "",
+        data.availability_status || "",
       ]
     );
   } else {
@@ -327,10 +331,13 @@ async function sendMatchSummary(candidates, employer, notifyCandidates = true) {
     }
   }
 
-  const keyboard = candidates.map((c) => ([{
-    text: `📎 קורות חיים של ${c.full_name || "מועמד"}`,
-    callback_data: `CV_${c.telegram_id}_${employerId}`,
-  }]));
+  const keyboard = candidates.map((c) => {
+    const score = calcMatchScore(c, employer);
+    return [{
+      text: `⭐ ${score}% התאמה — ${c.full_name || "מועמד"}`,
+      callback_data: `CV_${c.telegram_id}_${employerId}`,
+    }];
+  });
   keyboard.push([{ text: "🔄 הצג עוד מועמדים", callback_data: `REFRESH_MATCHES_${employerId}` }]);
   keyboard.push([{ text: "הפסק לקבל הצעות 🔕", callback_data: `STOP_OFFERS_EMPLOYER_${employerId}` }]);
 
@@ -519,6 +526,7 @@ async function findMatches(employer) {
   const filtered = [];
   for (const c of candidates) {
     if (rejectedIds.has(c.telegram_id)) continue;
+    if (c.availability_status === "⚪ לא מחפש כרגע") continue;
     if (await hasBeenMatched(c.telegram_id, employer.telegram_id)) continue;
     if (!workplaceMatches(c.workplace_pref, employer.org_type)) continue;
     if (!politicalMatches(c.political_side, employer.political_side)) continue;
@@ -538,6 +546,7 @@ async function findMatchingEmployers(candidate) {
   const interests = (candidate.interests || "").split(", ").map((i) => i.trim());
   const filtered = [];
   for (const e of employers) {
+    if (candidate.availability_status === "⚪ לא מחפש כרגע") continue;
     if (await hasBeenMatched(candidate.telegram_id, e.telegram_id)) continue;
     if (!workplaceMatches(candidate.workplace_pref, e.org_type)) continue;
     if (!politicalMatches(candidate.political_side, e.political_side)) continue;
@@ -567,6 +576,19 @@ async function findFutureSearchEmployers(candidate) {
     }
   }
   return filtered;
+}
+
+// ── דירוג התאמה ──────────────────────────────────────────────────────────────
+
+function calcMatchScore(candidate, employer) {
+  let matched = 0;
+  const interests = (candidate.interests || "").split(", ").map((s) => s.trim());
+  const fields    = (employer.fields    || "").split(", ").map((s) => s.trim());
+  if (fields.some((f) => interests.includes(f)))                              matched++;
+  if (workplaceMatches(candidate.workplace_pref, employer.org_type))          matched++;
+  if (politicalMatches(candidate.political_side, employer.political_side))    matched++;
+  if (availabilityMatches(candidate.availability, employer.availability))     matched++;
+  return Math.round((matched / 4) * 100);
 }
 
 // ── Excel ─────────────────────────────────────────────────────────────────────
@@ -757,6 +779,7 @@ const CANDIDATE_STEPS = [
   { key: "has_license",       question: "יש רישיון רכב?",                                                                  type: "single", options: [["כן", "לא"]] },
   { key: "english_level",     question: "רמת אנגלית?",                                                                     type: "single", options: [["גבוהה", "בסיסית"], ["לא רלוונטי"]] },
   { key: "irregular_hours",   question: "מוכן/ה לשעות לא שגרתיות?",                                                       type: "single", options: [["כן", "לא"]] },
+  { key: "availability_status", question: "מה מצב החיפוש שלך?", type: "single", options: [["🟢 מחפש באופן פעיל", "🟡 פתוח להצעות"], ["⚪ לא מחפש כרגע"]] },
   { key: "declaration",       question: "רק לידיעה. הפרטים ישמשו אותי להתאמות בלבד. אין בזה התחייבות מאף צד 🤝", type: "single", options: [["מאשר ✅"]] },
 ];
 
@@ -1019,6 +1042,15 @@ bot.onText(/\/start/, async (msg) => {
     return;
   }
 
+  const [qCandsRes, qEmpsRes] = await Promise.all([
+    query(`SELECT COUNT(*) FROM candidates WHERE status='active'`),
+    query(`SELECT COUNT(*) FROM employers WHERE status='active'`),
+  ]);
+  await bot.sendMessage(
+    chatId,
+    `📊 כרגע בקוזו יש ${qCandsRes.rows[0].count} יועצים ו-${qEmpsRes.rows[0].count} מגייסים פעילים 🤝`
+  );
+
   sessions[chatId] = { stage: "awaiting_type", username: msg.from.username || "" };
   await bot.sendMessage(
     chatId,
@@ -1241,6 +1273,43 @@ bot.on("message", async (msg) => {
       sessions[chatId] = { ...newSession("update", msg.from?.username || ""), stage: "updating" };
       await bot.sendMessage(chatId, "כיף שחזרת 🤝\nרק כמה עדכונים קצרים ואחזיר אותך לרשימה:");
       await sendStep(chatId, sessions[chatId]);
+      return;
+    }
+
+    if (lower.includes("קוזו במספרים")) {
+      const [candsRes, empsRes] = await Promise.all([
+        query(`SELECT interests FROM candidates WHERE status='active'`),
+        query(`SELECT COUNT(*) FROM employers WHERE status='active'`),
+      ]);
+      const countField = (field) => candsRes.rows.filter((c) => (c.interests || "").includes(field)).length;
+      await bot.sendMessage(
+        chatId,
+        `📊 כרגע בקוזו\n\n` +
+        `👤 יועצים פרלמנטריים: ${countField("ייעוץ פרלמנטרי")}\n` +
+        `📢 דוברים: ${countField("דוברות")}\n` +
+        `📱 אנשי סושיאל: ${countField("סושיאל ורשתות חברתיות")}\n` +
+        `🎯 יועצים פוליטיים: ${countField("יועץ פוליטי")}\n` +
+        `🎬 עריכת וידאו: ${countField("עריכת וידאו")}\n` +
+        `🏛 מגייסים פעילים: ${empsRes.rows[0].count}`
+      );
+      return;
+    }
+
+    if (lower.includes("סטטיסטיקות")) {
+      const [candsRes, empsRes, matchesRes, connectedRes] = await Promise.all([
+        query(`SELECT COUNT(*) FROM candidates WHERE status='active'`),
+        query(`SELECT COUNT(*) FROM employers WHERE status='active'`),
+        query(`SELECT COUNT(*) FROM matches`),
+        query(`SELECT COUNT(*) FROM cv_requests WHERE status='connected'`),
+      ]);
+      await bot.sendMessage(
+        chatId,
+        `📈 קוזו במספרים\n\n` +
+        `👥 אנשי מקצוע רשומים: ${candsRes.rows[0].count}\n` +
+        `🏛 מגייסים פעילים: ${empsRes.rows[0].count}\n` +
+        `🎯 התאמות שבוצעו: ${matchesRes.rows[0].count}\n` +
+        `🔗 חיבורים מוצלחים: ${connectedRes.rows[0].count}`
+      );
       return;
     }
 
@@ -1972,6 +2041,26 @@ async function sendWeeklySummary() {
   );
 }
 
+async function sendWeeklyDigest() {
+  const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  const [newCandsRes, newEmpsRes, matchesRes, connectedRes, activeCandsRes] = await Promise.all([
+    query(`SELECT COUNT(*) FROM candidates WHERE created_at >= $1`, [oneWeekAgo]),
+    query(`SELECT COUNT(*) FROM employers WHERE created_at >= $1`, [oneWeekAgo]),
+    query(`SELECT COUNT(*) FROM matches WHERE matched_at >= $1`, [oneWeekAgo]),
+    query(`SELECT COUNT(*) FROM cv_requests WHERE status='connected' AND updated_at >= $1`, [oneWeekAgo]),
+    query(`SELECT telegram_id FROM candidates WHERE status='active'`),
+  ]);
+  const msg =
+    `🔥 השבוע בקוזו\n\n` +
+    `- נוספו ${newCandsRes.rows[0].count} יועצים חדשים\n` +
+    `- נוספו ${newEmpsRes.rows[0].count} מגייסים חדשים\n` +
+    `- בוצעו ${matchesRes.rows[0].count} התאמות\n` +
+    `- ${connectedRes.rows[0].count} חיבורים מוצלחים`;
+  for (const row of activeCandsRes.rows) {
+    try { await bot.sendMessage(row.telegram_id, msg); } catch (_) {}
+  }
+}
+
 function scheduleWeeklySummary() {
   const now = new Date();
   const day = now.getDay(); // 0 = Sunday
@@ -1981,6 +2070,7 @@ function scheduleWeeklySummary() {
   next.setHours(9, 0, 0, 0);
   setTimeout(async () => {
     try { await sendWeeklySummary(); } catch (e) { console.error("weekly summary error:", e.message); }
+    try { await sendWeeklyDigest(); } catch (e) { console.error("weekly digest error:", e.message); }
     scheduleWeeklySummary();
   }, next - now);
 }
