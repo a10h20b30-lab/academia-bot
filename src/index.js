@@ -447,6 +447,28 @@ function scheduleMonthlyCheckin(candidateId) {
   }, 30 * 24 * 60 * 60 * 1000);
 }
 
+function scheduleBimonthlyReminder(candidateId) {
+  setTimeout(async () => {
+    const cand = await getCandidateRecord(candidateId);
+    if (!cand || cand.status !== "active") return;
+    try {
+      await bot.sendMessage(
+        candidateId,
+        "היי, עדיין מחפש הזדמנות? 👋\nהפרופיל שלך פעיל — רק רוצים לוודא שהמידע עדכני.",
+        {
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: "כן, עדיין מחפש",  callback_data: `CHECKIN_STILL_${candidateId}` }],
+              [{ text: "עדכן פרטים",       callback_data: "EXISTING_UPDATE" }],
+              [{ text: "מצאתי עבודה 🎉",  callback_data: `CHECKIN_FOUND_${candidateId}` }],
+            ],
+          },
+        }
+      );
+    } catch (_) {}
+  }, 60 * 24 * 60 * 60 * 1000);
+}
+
 function politicalMatches(candidateSide, employerSide) {
   // מסנן רק אם שניהם ציינו העדפה מפורשת
   if (!candidateSide || candidateSide === "שניהם")    return true;
@@ -847,18 +869,33 @@ async function finishSession(chatId, session) {
     }
     scheduleCandidateNudge(chatId);
     scheduleMonthlyCheckin(chatId);
+    scheduleBimonthlyReminder(chatId);
 
+    // הודעת קבלת פנים
+    await bot.sendMessage(
+      chatId,
+      "ברוך הבא לקוזו 🤝\n\nהפרופיל שלך נשמר. מה קורה עכשיו?\nקוזו עובד ברקע ומחפש גופים מתאימים.\nברגע שיהיה התאמה — תשמע ממני ישירות.\n\nאין צורך לעשות כלום — קוזו עושה את השאר."
+    );
     if (matchingEmployers.length > 0) {
       await bot.sendMessage(
         chatId,
         `העברתי את הפרטים שלך ל-${matchingEmployers.length} גופים שנראים לי מתאימים.\nברגע שיירשמו עוד גופים מתאימים — תשמע ממני 🤝`
       );
-    } else {
-      await bot.sendMessage(
-        chatId,
-        "הפרופיל שלך נשמר. ברגע שיהיה מישהו מתאים — תשמע ממני 🤝"
-      );
     }
+    // הפניית חברים
+    await bot.sendMessage(
+      chatId,
+      "יש לך עמית שגם מחפש? שתף איתו את קוזו 🤝",
+      {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "💬 שתף בוואטסאפ", url: "https://wa.me/?text=%D7%94%D7%A6%D7%98%D7%A8%D7%A3%20%D7%9C%D7%A7%D7%95%D7%96%D7%95%20%E2%80%94%20%D7%94%D7%9E%D7%A7%D7%95%D7%9D%20%D7%A9%D7%9E%D7%97%D7%91%D7%A8%20%D7%90%D7%A0%D7%A9%D7%99%20%D7%9E%D7%A7%D7%A6%D7%95%D7%A2%20%D7%91%D7%A2%D7%95%D7%9C%D7%9D%20%D7%94%D7%A4%D7%95%D7%9C%D7%99%D7%98%D7%99%3A%20t.me%2Fkozo_ai_bot" }],
+            [{ text: "📱 שתף בטלגרם",   url: "https://t.me/share/url?url=t.me%2Fkozo_ai_bot&text=%D7%94%D7%A6%D7%98%D7%A8%D7%A3%20%D7%9C%D7%A7%D7%95%D7%96%D7%95" }],
+            [{ text: "👥 שתף בפייסבוק", url: "https://www.facebook.com/sharer/sharer.php?u=t.me%2Fkozo_ai_bot" }],
+          ],
+        },
+      }
+    );
   } else {
     await bot.sendMessage(ADMIN_ID, `📥 לשכה חדשה נרשמה!\n\n${formatRecord("employer", session)}`);
 
@@ -1130,11 +1167,20 @@ bot.on("message", async (msg) => {
     const lower = text.toLowerCase();
 
     if (lower.includes("מצאתי עבודה")) {
-      await archiveCandidate(chatId);
-      await exportExcel();
-      await bot.sendMessage(chatId, "כיף לשמוע! 🎉 אם יום אחד תרצו לחזור — /start תמיד פתוח");
-      await bot.sendMessage(ADMIN_ID, `📦 מועמד הועבר לארכיון (ID: ${chatId}), מצא עבודה`);
-      delete sessions[chatId];
+      const cand = await getCandidateRecord(chatId);
+      sessions[chatId] = { stage: "found_job_source", candidateName: cand?.full_name || "" };
+      await bot.sendMessage(
+        chatId,
+        "מצוין! 🎉 איך מצאת?",
+        {
+          reply_markup: {
+            inline_keyboard: [[
+              { text: "דרך קוזו 🤝",  callback_data: `JOB_SOURCE_kozo_${chatId}` },
+              { text: "ממקום אחר",     callback_data: `JOB_SOURCE_other_${chatId}` },
+            ]],
+          },
+        }
+      );
       return;
     }
 
@@ -1485,6 +1531,25 @@ bot.on("callback_query", async (cbQuery) => {
     await exportExcel();
     await bot.sendMessage(chatId, "מעולה! 🎉 כיף לשמוע. אם יום אחד תרצו לחזור — /start תמיד פתוח");
     await bot.sendMessage(ADMIN_ID, `📦 מועמד הועבר לארכיון (ID: ${candidateId}), מצא עבודה (check-in חודשי)`);
+    return;
+  }
+
+  // מקור עבודה
+  if (data.startsWith("JOB_SOURCE_")) {
+    const parts = data.split("_");
+    const source = parts[2];
+    const candidateId = Number(parts[3]);
+    const cand = await getCandidateRecord(candidateId);
+    const name = cand?.full_name || `ID:${candidateId}`;
+    await archiveCandidate(candidateId);
+    await exportExcel();
+    await bot.sendMessage(chatId, "כיף לשמוע! 🎉 בהצלחה בתפקיד החדש. אם אי פעם תרצו לחזור — /start תמיד פתוח");
+    if (source === "kozo") {
+      await bot.sendMessage(ADMIN_ID, `🏆 חיבור מוצלח דרך קוזו!\n\n${name} מצא עבודה דרך קוזו ✅`);
+    } else {
+      await bot.sendMessage(ADMIN_ID, `📦 יועץ מצא עבודה ממקום אחר: ${name}`);
+    }
+    delete sessions[chatId];
     return;
   }
 
@@ -1963,8 +2028,30 @@ function scheduleDailyBackup() {
   if (next <= now) next.setDate(next.getDate() + 1);
   setTimeout(async () => {
     try { await sendDailyBackup(); } catch (e) { console.error("daily backup error:", e.message); }
+    try { await deactivateInactiveEmployers(); } catch (e) { console.error("deactivate employers error:", e.message); }
     scheduleDailyBackup();
   }, next - now);
+}
+
+// ── ביטול מגייסים לא פעילים ──────────────────────────────────────────────────
+
+async function deactivateInactiveEmployers() {
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  const res = await query(
+    `SELECT e.telegram_id, e.contact_name
+     FROM employers e
+     WHERE e.status='active' AND e.created_at < $1
+     AND NOT EXISTS (
+       SELECT 1 FROM cv_requests cr WHERE cr.employer_id = e.telegram_id
+     )`,
+    [thirtyDaysAgo]
+  );
+  if (res.rows.length === 0) return;
+  for (const emp of res.rows) {
+    await query(`UPDATE employers SET status='inactive' WHERE telegram_id=$1`, [emp.telegram_id]);
+  }
+  const names = res.rows.map((e) => e.contact_name || `ID:${e.telegram_id}`).join(", ");
+  await bot.sendMessage(ADMIN_ID, `⏸ הוצאו מהמאגר (לא פעילים 30 יום): ${names}`);
 }
 
 // ── אתחול ────────────────────────────────────────────────────────────────────
@@ -1987,3 +2074,15 @@ function scheduleDailyBackup() {
   scheduleApiHealthCheck();
   console.log("🟢 קוזו bot פועל בטלגרם...");
 })();
+
+// ── שגיאות גלובליות ───────────────────────────────────────────────────────────
+
+process.on("uncaughtException", async (err) => {
+  console.error("uncaughtException:", err);
+  try { await bot.sendMessage(ADMIN_ID, `⚠️ שגיאה כללית (uncaughtException):\n${err.message}`); } catch (_) {}
+});
+
+process.on("unhandledRejection", async (reason) => {
+  console.error("unhandledRejection:", reason);
+  try { await bot.sendMessage(ADMIN_ID, `⚠️ שגיאה כללית (unhandledRejection):\n${reason?.message || reason}`); } catch (_) {}
+});
