@@ -1034,6 +1034,73 @@ bot.onText(/\/start/, async (msg) => {
   );
 });
 
+// ── פקודות slash ─────────────────────────────────────────────────────────────
+
+bot.onText(/\/help/, async (msg) => {
+  await bot.sendMessage(msg.chat.id,
+    `שאלות נפוצות 👋\n\n` +
+    `👤 ליועצים:\n` +
+    `❓ איך אני יודע שהפרופיל שלי פעיל?\n← כתוב /profile ותקבל את כל הפרטים שלך\n\n` +
+    `❓ למה לא קיבלתי התאמות עדיין?\n← קוזו ממשיך לעבוד. ברגע שתהיה לשכה מתאימה — תקבל הודעה\n\n` +
+    `❓ איך אני מעדכן פרטים?\n← כתוב /update או לחץ על כפתור עדכן בפרופיל\n\n` +
+    `❓ איך יוצאים מהמאגר זמנית?\n← כתוב /pause. לחזרה — כתוב /resume\n\n` +
+    `❓ מה קורה כשמגייס מקבל את הפרטים שלי?\n← הם רואים את הפרופיל שלך. אם מתאים — ייצרו קשר ישירות\n\n` +
+    `🏛 למגייסים:\n` +
+    `❓ איך מקבלים קוד גישה?\n← wa.me/972548028082\n\n` +
+    `❓ איך מקבלים קורות חיים של מועמד?\n← לחצו על כפתור הקורות חיים ליד שם המועמד\n\n` +
+    `❓ למה אני לא רואה מועמדים?\n← קוזו יעדכן כשיירשם מישהו שמתאים לדרישות שלכם\n\n` +
+    `❓ האם המועמדים יודעים שפניתי אליהם?\n← לא. דיסקרטי לחלוטין\n\n` +
+    `🔒 כללי:\n` +
+    `❓ האם המידע שלי דיסקרטי?\n← כן. אף משתמש לא רואה את האחרים\n\n` +
+    `❓ כמה עולה השירות?\n← חינמי ליועצים. מגייסים מצטרפים בהזמנה בלבד\n\n` +
+    `❓ יש בעיה או שאלה?\n← wa.me/972548028082`
+  );
+});
+
+bot.onText(/\/profile/, async (msg) => {
+  const chatId = msg.chat.id;
+  const cand = await getCandidateRecord(chatId);
+  if (cand) {
+    await bot.sendMessage(chatId, buildProfileMessage(cand), {
+      reply_markup: { inline_keyboard: [[{ text: "✏️ עדכן פרטים", callback_data: "UPDATE_PROFILE" }]] },
+    });
+  } else {
+    await bot.sendMessage(chatId, "לא מצאתי פרופיל. אם עוד לא נרשמת — כתוב /start");
+  }
+});
+
+bot.onText(/\/update/, async (msg) => {
+  const chatId = msg.chat.id;
+  sessions[chatId] = { ...newSession("update", msg.from?.username || ""), stage: "updating" };
+  await bot.sendMessage(chatId, "יאללה, נעדכן את הפרטים שלך");
+  await sendStep(chatId, sessions[chatId]);
+});
+
+bot.onText(/\/pause/, async (msg) => {
+  const chatId = msg.chat.id;
+  await pauseCandidate(chatId);
+  await exportExcel();
+  await bot.sendMessage(chatId, "הבנתי.\nעצרתי. כשתרצו לחזור — כתבו /resume", { parse_mode: "Markdown" });
+  await bot.sendMessage(ADMIN_ID, `⏸ מועמד השהה את עצמו (ID: ${chatId})`);
+});
+
+bot.onText(/\/resume/, async (msg) => {
+  const chatId = msg.chat.id;
+  if (await isEmployerPaused(chatId)) {
+    await resumeEmployer(chatId);
+    await bot.sendMessage(chatId, "שמח שחזרתם 🤝\nאחזיר אתכם לרשימה. ברגע שיהיה מישהו מתאים, אחבר.");
+    return;
+  }
+  const cand = await getCandidateRecord(chatId);
+  if (!cand || cand.status === "active") {
+    await bot.sendMessage(chatId, "כבר ברשימה שלי");
+    return;
+  }
+  sessions[chatId] = { ...newSession("update", msg.from?.username || ""), stage: "updating" };
+  await bot.sendMessage(chatId, "שמחים שחזרת 🤝 כמה עדכונים קצרים ואחזיר אותך לרשימה:");
+  await sendStep(chatId, sessions[chatId]);
+});
+
 // ── הודעות טקסט ──────────────────────────────────────────────────────────────
 
 bot.on("message", async (msg) => {
@@ -2163,6 +2230,14 @@ async function deactivateInactiveEmployers() {
     console.error("❌ Database connection failed:", err.message);
     console.log("⚠️ Bot will continue without database");
   }
+  await bot.setMyCommands([
+    { command: "start",   description: "כניסה / הרשמה" },
+    { command: "help",    description: "עזרה ושאלות נפוצות" },
+    { command: "profile", description: "הפרופיל שלי" },
+    { command: "update",  description: "עדכן פרטים" },
+    { command: "pause",   description: "השהה אותי" },
+    { command: "resume",  description: "החזר אותי לפעילות" },
+  ]);
   scheduleMonthlyReport();
   scheduleWeeklySummary();
   scheduleDailyBackup();
