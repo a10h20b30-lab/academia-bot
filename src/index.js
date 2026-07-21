@@ -936,6 +936,43 @@ bot.on("message", async (msg) => {
     }
     if (text === "טבלה") { await sendExcel(); return; }
     if (text === "סטטוס") { await sendStatus(); return; }
+    if (text === "יועצים") {
+      const res = await query(`SELECT full_name, interests, status FROM candidates WHERE status='active' ORDER BY created_at DESC`);
+      if (res.rows.length === 0) {
+        await bot.sendMessage(chatId, "אין יועצים פעילים כרגע.");
+      } else {
+        const lines = res.rows.map((r, i) =>
+          `${i + 1}. ${r.full_name || "—"} | ${r.interests || "—"}`
+        ).join("\n");
+        await bot.sendMessage(chatId, `👥 יועצים פעילים (${res.rows.length}):\n\n${lines}`);
+      }
+      return;
+    }
+    if (text === "מגייסים") {
+      const res = await query(`SELECT contact_name, org_type, fields, status FROM employers WHERE status='active' ORDER BY created_at DESC`);
+      if (res.rows.length === 0) {
+        await bot.sendMessage(chatId, "אין מגייסים פעילים כרגע.");
+      } else {
+        const lines = res.rows.map((r, i) =>
+          `${i + 1}. ${r.contact_name || "—"} | ${r.org_type || "—"} | ${r.fields || "—"}`
+        ).join("\n");
+        await bot.sendMessage(chatId, `🏛 מגייסים פעילים (${res.rows.length}):\n\n${lines}`);
+      }
+      return;
+    }
+    if (text === "חיבורים") {
+      const res = await query(`SELECT candidate_name, employer_name, matched_at FROM matches WHERE status='active' ORDER BY matched_at DESC LIMIT 30`);
+      if (res.rows.length === 0) {
+        await bot.sendMessage(chatId, "אין חיבורים פעילים כרגע.");
+      } else {
+        const lines = res.rows.map((r, i) => {
+          const date = r.matched_at ? new Date(r.matched_at).toLocaleDateString("he-IL") : "—";
+          return `${i + 1}. ${r.candidate_name || "—"} ↔ ${r.employer_name || "—"} (${date})`;
+        }).join("\n");
+        await bot.sendMessage(chatId, `🔗 חיבורים פעילים (${res.rows.length}):\n\n${lines}`);
+      }
+      return;
+    }
     if (text === "הודעה") {
       sessions[chatId] = { stage: "broadcast", step: "audience" };
       await bot.sendMessage(chatId, "לאיזה קהל?", {
