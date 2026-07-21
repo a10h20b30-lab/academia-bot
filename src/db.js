@@ -89,7 +89,20 @@ export async function initDB() {
     )
   `);
 
+  await query(`ALTER TABLE employers ADD COLUMN IF NOT EXISTS political_side TEXT`);
+  await query(`ALTER TABLE employers ADD COLUMN IF NOT EXISTS requires_license TEXT`);
+  await query(`ALTER TABLE employers ADD COLUMN IF NOT EXISTS english_required TEXT`);
+  await query(`ALTER TABLE employers ADD COLUMN IF NOT EXISTS irregular_hours TEXT`);
   await query(`ALTER TABLE employers ADD COLUMN IF NOT EXISTS future_search TEXT`);
+
+  await query(`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS political_side TEXT`);
+  await query(`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS has_license TEXT`);
+  await query(`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS english_level TEXT`);
+  await query(`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS irregular_hours TEXT`);
+  await query(`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS is_intern TEXT`);
+  await query(`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS internship_mentor TEXT`);
+  await query(`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS internship_phone TEXT`);
+  await query(`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS workplace_pref TEXT`);
 
   await query(`
     CREATE TABLE IF NOT EXISTS approved_phones (
