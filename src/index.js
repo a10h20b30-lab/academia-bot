@@ -960,21 +960,32 @@ bot.on("message", async (msg) => {
     }
     if (text === "התאמות") {
       const res = await query(
-        `SELECT e.contact_name, e.org_type, COUNT(m.id) AS match_count, MAX(m.matched_at) AS last_match
+        `SELECT e.contact_name, e.org_type, m.candidate_name, m.matched_at
          FROM matches m
          JOIN employers e ON e.telegram_id = m.employer_id
          WHERE m.status='active'
-         GROUP BY e.contact_name, e.org_type
-         ORDER BY last_match DESC LIMIT 30`
+         ORDER BY e.contact_name, m.matched_at DESC
+         LIMIT 100`
       );
       if (res.rows.length === 0) {
         await bot.sendMessage(chatId, "אין התאמות פעילות כרגע.");
       } else {
-        const lines = res.rows.map((r, i) => {
-          const date = r.last_match ? new Date(r.last_match).toLocaleDateString("he-IL") : "—";
-          return `${i + 1}. ${r.contact_name || "—"} (${r.org_type || "—"}) — ${r.match_count} מועמדים | ${date}`;
-        }).join("\n");
-        await bot.sendMessage(chatId, `🎯 מגייסים עם התאמות (${res.rows.length}):\n\n${lines}`);
+        // קיבוץ לפי מגייס
+        const grouped = {};
+        for (const r of res.rows) {
+          const key = `${r.contact_name || "—"}|${r.org_type || "—"}`;
+          if (!grouped[key]) grouped[key] = { contact_name: r.contact_name, org_type: r.org_type, candidates: [] };
+          grouped[key].candidates.push({ name: r.candidate_name, date: r.matched_at });
+        }
+        const blocks = Object.values(grouped).map((g) => {
+          const candLines = g.candidates.map((c) => {
+            const date = c.date ? new Date(c.date).toLocaleDateString("he-IL") : "—";
+            return `   👤 ${c.name || "—"} — נשלח ${date}`;
+          }).join("\n");
+          return `🏛 ${g.contact_name || "—"} (${g.org_type || "—"})\n${candLines}`;
+        });
+        const total = res.rows.length;
+        await bot.sendMessage(chatId, `🎯 התאמות פעילות (${total} יועצים, ${Object.keys(grouped).length} מגייסים)\n\n${blocks.join("\n\n")}`);
       }
       return;
     }
