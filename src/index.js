@@ -1930,6 +1930,42 @@ async function sendExcel() {
   await bot.sendDocument(ADMIN_ID, outPath, {}, { caption: "📊 טבלת נתונים מעודכנת" });
 }
 
+// ── גיבוי יומי ───────────────────────────────────────────────────────────────
+
+async function sendDailyBackup() {
+  const [candidatesRes, employersRes, cvRes, matchesRes, accessRes] = await Promise.all([
+    query(`SELECT * FROM candidates ORDER BY created_at ASC`),
+    query(`SELECT * FROM employers ORDER BY created_at ASC`),
+    query(`SELECT * FROM cv_requests ORDER BY requested_at ASC`),
+    query(`SELECT * FROM matches ORDER BY matched_at ASC`),
+    query(`SELECT * FROM access_requests ORDER BY timestamp ASC`),
+  ]);
+  const backup = {
+    exported_at: new Date().toISOString(),
+    candidates:     candidatesRes.rows,
+    employers:      employersRes.rows,
+    cv_requests:    cvRes.rows,
+    matches:        matchesRes.rows,
+    access_requests: accessRes.rows,
+  };
+  const dateStr = new Date().toLocaleDateString("he-IL");
+  const outPath = path.join(__dirname, "../backup.json");
+  const { writeFileSync } = await import("fs");
+  writeFileSync(outPath, JSON.stringify(backup, null, 2), "utf8");
+  await bot.sendDocument(ADMIN_ID, outPath, {}, { caption: `💾 גיבוי יומי — ${dateStr}` });
+}
+
+function scheduleDailyBackup() {
+  const now  = new Date();
+  const next = new Date(now);
+  next.setHours(6, 0, 0, 0);
+  if (next <= now) next.setDate(next.getDate() + 1);
+  setTimeout(async () => {
+    try { await sendDailyBackup(); } catch (e) { console.error("daily backup error:", e.message); }
+    scheduleDailyBackup();
+  }, next - now);
+}
+
 // ── אתחול ────────────────────────────────────────────────────────────────────
 
 (async () => {
@@ -1942,6 +1978,7 @@ async function sendExcel() {
   }
   scheduleMonthlyReport();
   scheduleWeeklySummary();
+  scheduleDailyBackup();
   await checkAnthropicKey();
   scheduleApiHealthCheck();
   console.log("🟢 קוזו bot פועל בטלגרם...");
