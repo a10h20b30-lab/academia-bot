@@ -58,6 +58,7 @@ function buildProfileMessage(cand) {
     `עיר: ${cand.city || ""}`,
     `תואר: ${cand.degree || ""} — ${cand.field_of_study || ""}`,
     `שפות: ${cand.languages || ""}`,
+    ...(cand.is_intern === "כן ✅" && cand.internship_mentor ? [`🏛 התמחות: ${cand.internship_mentor}`] : []),
     `ניסיון: ${cand.experience || ""}`,
     `תחומים: ${cand.interests || ""}`,
     `מקום מועדף: ${cand.workplace_pref || ""}`,
@@ -764,7 +765,7 @@ const CANDIDATE_STEPS = [
   { key: "field_of_study",    question: "מה תחום הלימודים?",                                                                    type: "text"   },
   { key: "languages",         question: "באילו שפות יש שליטה?\nאפשר לסמן כמה ולחץ סיום ✓",                                  type: "multi",  options: [["עברית", "אנגלית"], ["ערבית", "רוסית"], ["אחר", "סיום ✓"]] },
   { key: "is_intern",         question: "האם עברת התמחות בכנסת?",                                                               type: "single", options: [["כן ✅", "לא ❌"]] },
-  { key: "internship_mentor", question: "אצל מי התמחית? (שם הדובר/ת וועדה)",                                                   type: "text",   conditional: "is_intern=כן ✅" },
+  { key: "internship_mentor", question: "שם הדובר/ת שאצלו/ה התמחית",                                                            type: "text",   conditional: "is_intern=כן ✅" },
   { key: "internship_phone",  question: "מה מספר הנייד שלו/ה?",                                                                 type: "text",   conditional: "is_intern=כן ✅" },
   { key: "experience",        question: "נשמח לשמוע על הדרך שלך עד כה",                                    type: "text"   },
   { key: "interests",         question: "באילו תחומים יש התמחות או עניין?\nאפשר לסמן כמה ולחץ סיום ✓",                      type: "multi",  options: [["ייעוץ פרלמנטרי", "דוברות"], ["סושיאל ורשתות חברתיות", "יועץ פוליטי"], ["עריכת וידאו", "סיום ✓"]] },
@@ -1541,10 +1542,14 @@ bot.on("callback_query", async (cbQuery) => {
       await bot.sendMessage(chatId, "לא מצאתי קורות חיים 🙏");
       return;
     }
+    const internshipLine = candidate.is_intern === "כן ✅" && candidate.internship_mentor
+      ? `\n🏛 התמחות: ${candidate.internship_mentor}`
+      : "";
+    const cvCaption = `קורות חיים — ${candidate.full_name || "מועמד"}${internshipLine}`;
     if (candidate.cv.startsWith("file_id:")) {
-      await bot.sendDocument(chatId, candidate.cv.replace("file_id:", ""), {}, { caption: `קורות חיים — ${candidate.full_name || "מועמד"}` });
+      await bot.sendDocument(chatId, candidate.cv.replace("file_id:", ""), {}, { caption: cvCaption });
     } else if (candidate.cv.startsWith("photo_id:")) {
-      await bot.sendPhoto(chatId, candidate.cv.replace("photo_id:", ""), { caption: `קורות חיים — ${candidate.full_name || "מועמד"}` });
+      await bot.sendPhoto(chatId, candidate.cv.replace("photo_id:", ""), { caption: cvCaption });
     }
     if (!candidate.phone) {
       await bot.sendMessage(chatId, `ליצירת קשר ישירה עם ${candidate.full_name || "המועמד"} — פנו לקוזו: wa.me/972548028082`);
