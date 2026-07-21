@@ -58,7 +58,7 @@ function buildProfileMessage(cand) {
     `עיר: ${cand.city || ""}`,
     `תואר: ${cand.degree || ""} — ${cand.field_of_study || ""}`,
     `שפות: ${cand.languages || ""}`,
-    ...(cand.is_intern === "כן ✅" && cand.internship_mentor ? [`🏛 התמחות: ${cand.internship_mentor}`] : []),
+    ...(cand.is_intern === "כן ✅" && cand.internship_mentor ? [`🏛 התמחות: דוברות הכנסת — שנה | אצל: ${cand.internship_mentor}`] : []),
     `ניסיון: ${cand.experience || ""}`,
     `תחומים: ${cand.interests || ""}`,
     `מקום מועדף: ${cand.workplace_pref || ""}`,
@@ -1543,7 +1543,7 @@ bot.on("callback_query", async (cbQuery) => {
       return;
     }
     const internshipLine = candidate.is_intern === "כן ✅" && candidate.internship_mentor
-      ? `\n🏛 התמחות: ${candidate.internship_mentor}`
+      ? `\n🏛 התמחות: דוברות הכנסת — שנה | אצל: ${candidate.internship_mentor}`
       : "";
     const cvCaption = `קורות חיים — ${candidate.full_name || "מועמד"}${internshipLine}`;
     if (candidate.cv.startsWith("file_id:")) {
