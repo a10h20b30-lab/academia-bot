@@ -1043,15 +1043,6 @@ bot.onText(/\/start/, async (msg) => {
     return;
   }
 
-  const [qCandsRes, qEmpsRes] = await Promise.all([
-    query(`SELECT COUNT(*) FROM candidates WHERE status='active'`),
-    query(`SELECT COUNT(*) FROM employers WHERE status='active'`),
-  ]);
-  await bot.sendMessage(
-    chatId,
-    `📊 כרגע בקוזו יש ${qCandsRes.rows[0].count} יועצים ו-${qEmpsRes.rows[0].count} מגייסים פעילים 🤝`
-  );
-
   sessions[chatId] = { stage: "awaiting_type", username: msg.from.username || "" };
   await bot.sendMessage(
     chatId,
@@ -1103,6 +1094,41 @@ bot.on("message", async (msg) => {
     }
     if (text === "טבלה") { await sendExcel(); return; }
     if (text === "סטטוס") { await sendStatus(); return; }
+    if (text === "קוזו במספרים") {
+      const [candsRes, empsRes] = await Promise.all([
+        query(`SELECT interests FROM candidates WHERE status='active'`),
+        query(`SELECT COUNT(*) FROM employers WHERE status='active'`),
+      ]);
+      const countField = (field) => candsRes.rows.filter((c) => (c.interests || "").includes(field)).length;
+      await bot.sendMessage(
+        chatId,
+        `📊 כרגע בקוזו\n\n` +
+        `👤 יועצים פרלמנטריים: ${countField("ייעוץ פרלמנטרי")}\n` +
+        `📢 דוברים: ${countField("דוברות")}\n` +
+        `📱 אנשי סושיאל: ${countField("סושיאל ורשתות חברתיות")}\n` +
+        `🎯 יועצים פוליטיים: ${countField("יועץ פוליטי")}\n` +
+        `🎬 עריכת וידאו: ${countField("עריכת וידאו")}\n` +
+        `🏛 מגייסים פעילים: ${empsRes.rows[0].count}`
+      );
+      return;
+    }
+    if (text === "סטטיסטיקות") {
+      const [candsRes, empsRes, matchesRes, connectedRes] = await Promise.all([
+        query(`SELECT COUNT(*) FROM candidates WHERE status='active'`),
+        query(`SELECT COUNT(*) FROM employers WHERE status='active'`),
+        query(`SELECT COUNT(*) FROM matches`),
+        query(`SELECT COUNT(*) FROM cv_requests WHERE status='connected'`),
+      ]);
+      await bot.sendMessage(
+        chatId,
+        `📈 קוזו במספרים\n\n` +
+        `👥 אנשי מקצוע רשומים: ${candsRes.rows[0].count}\n` +
+        `🏛 מגייסים פעילים: ${empsRes.rows[0].count}\n` +
+        `🎯 התאמות שבוצעו: ${matchesRes.rows[0].count}\n` +
+        `🔗 חיבורים מוצלחים: ${connectedRes.rows[0].count}`
+      );
+      return;
+    }
     if (text === "יועצים") {
       const res = await query(`SELECT full_name, interests, status FROM candidates WHERE status='active' ORDER BY created_at DESC`);
       if (res.rows.length === 0) {
@@ -1274,43 +1300,6 @@ bot.on("message", async (msg) => {
       sessions[chatId] = { ...newSession("update", msg.from?.username || ""), stage: "updating" };
       await bot.sendMessage(chatId, "כיף שחזרת 🤝\nרק כמה עדכונים קצרים ואחזיר אותך לרשימה:");
       await sendStep(chatId, sessions[chatId]);
-      return;
-    }
-
-    if (lower.includes("קוזו במספרים")) {
-      const [candsRes, empsRes] = await Promise.all([
-        query(`SELECT interests FROM candidates WHERE status='active'`),
-        query(`SELECT COUNT(*) FROM employers WHERE status='active'`),
-      ]);
-      const countField = (field) => candsRes.rows.filter((c) => (c.interests || "").includes(field)).length;
-      await bot.sendMessage(
-        chatId,
-        `📊 כרגע בקוזו\n\n` +
-        `👤 יועצים פרלמנטריים: ${countField("ייעוץ פרלמנטרי")}\n` +
-        `📢 דוברים: ${countField("דוברות")}\n` +
-        `📱 אנשי סושיאל: ${countField("סושיאל ורשתות חברתיות")}\n` +
-        `🎯 יועצים פוליטיים: ${countField("יועץ פוליטי")}\n` +
-        `🎬 עריכת וידאו: ${countField("עריכת וידאו")}\n` +
-        `🏛 מגייסים פעילים: ${empsRes.rows[0].count}`
-      );
-      return;
-    }
-
-    if (lower.includes("סטטיסטיקות")) {
-      const [candsRes, empsRes, matchesRes, connectedRes] = await Promise.all([
-        query(`SELECT COUNT(*) FROM candidates WHERE status='active'`),
-        query(`SELECT COUNT(*) FROM employers WHERE status='active'`),
-        query(`SELECT COUNT(*) FROM matches`),
-        query(`SELECT COUNT(*) FROM cv_requests WHERE status='connected'`),
-      ]);
-      await bot.sendMessage(
-        chatId,
-        `📈 קוזו במספרים\n\n` +
-        `👥 אנשי מקצוע רשומים: ${candsRes.rows[0].count}\n` +
-        `🏛 מגייסים פעילים: ${empsRes.rows[0].count}\n` +
-        `🎯 התאמות שבוצעו: ${matchesRes.rows[0].count}\n` +
-        `🔗 חיבורים מוצלחים: ${connectedRes.rows[0].count}`
-      );
       return;
     }
 
