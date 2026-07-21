@@ -1547,8 +1547,8 @@ async function getBroadcastRecipients(bs) {
 async function sendBroadcast(bs) {
   const ids = await getBroadcastRecipients(bs);
   const finalMessage = bs.addWhatsapp
-    ? `${bs.message}\n\nלפרטים: wa.me/972548028082`
-    : bs.message;
+    ? `🔥 המלצה חמה מקוזו\n\n${bs.message}\n\nלפרטים: wa.me/972548028082`
+    : `🔥 המלצה חמה מקוזו\n\n${bs.message}`;
   let sent = 0;
   for (const id of ids) {
     try {
