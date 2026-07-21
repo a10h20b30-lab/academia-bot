@@ -1511,17 +1511,20 @@ function broadcastFieldMatches(row, fields, isCandidate) {
 }
 
 function broadcastPoliticalMatches(row, political) {
-  if (political === "all") return true;
+  if (!political || political === "all") return true;
   const side = row.political_side || "";
-  if (side === "שניהם" || side === "לא רלוונטי") return true;
+  if (!side || side === "שניהם" || side === "לא רלוונטי") return true;
   return side === political;
 }
 
 async function getBroadcastRecipients(bs) {
-  const { audience, fields, political } = bs;
+  const audience  = bs.audience  || "all";
+  const fields    = bs.fields    || [];
+  const political = bs.political || "all";
   const ids = new Set();
   if (audience === "candidates" || audience === "all") {
     const res = await query(`SELECT * FROM candidates WHERE status='active'`);
+    console.log(`[broadcast] candidates active: ${res.rows.length}, fields: ${JSON.stringify(fields)}, political: ${political}`);
     for (const c of res.rows) {
       if (!broadcastFieldMatches(c, fields, true)) continue;
       if (!broadcastPoliticalMatches(c, political)) continue;
@@ -1530,12 +1533,14 @@ async function getBroadcastRecipients(bs) {
   }
   if (audience === "employers" || audience === "all") {
     const res = await query(`SELECT * FROM employers WHERE status='active'`);
+    console.log(`[broadcast] employers active: ${res.rows.length}`);
     for (const e of res.rows) {
       if (!broadcastFieldMatches(e, fields, false)) continue;
       if (!broadcastPoliticalMatches(e, political)) continue;
       ids.add(e.telegram_id);
     }
   }
+  console.log(`[broadcast] total recipients: ${ids.size}`);
   return ids;
 }
 
