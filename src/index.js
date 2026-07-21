@@ -402,9 +402,16 @@ function scheduleMonthlyCheckin(candidateId) {
 }
 
 function politicalMatches(candidateSide, employerSide) {
-  if (!candidateSide || candidateSide === "שניהם") return true;
+  // מסנן רק אם שניהם ציינו העדפה מפורשת
+  if (!candidateSide || candidateSide === "שניהם")    return true;
   if (!employerSide  || employerSide  === "לא רלוונטי") return true;
   return candidateSide === employerSide;
+}
+
+function availabilityMatches(candidateAvail, employerAvail) {
+  if (!candidateAvail || !employerAvail) return true;
+  if (candidateAvail === "פתוח לכל הצעה" || employerAvail === "פתוח לכל הצעה") return true;
+  return candidateAvail === employerAvail;
 }
 
 async function findMatches(employer) {
@@ -424,6 +431,7 @@ async function findMatches(employer) {
     if (await hasBeenMatched(c.telegram_id, employer.telegram_id)) continue;
     if (!workplaceMatches(c.workplace_pref, employer.org_type)) continue;
     if (!politicalMatches(c.political_side, employer.political_side)) continue;
+    if (!availabilityMatches(c.availability, employer.availability)) continue;
     const interests = (c.interests || "").split(", ");
     if (fields.some((f) => interests.some((i) => i.trim() === f.trim()))) {
       filtered.push(c);
@@ -442,6 +450,7 @@ async function findMatchingEmployers(candidate) {
     if (await hasBeenMatched(candidate.telegram_id, e.telegram_id)) continue;
     if (!workplaceMatches(candidate.workplace_pref, e.org_type)) continue;
     if (!politicalMatches(candidate.political_side, e.political_side)) continue;
+    if (!availabilityMatches(candidate.availability, e.availability)) continue;
     const fields = (e.fields || "").split(", ").map((f) => f.trim());
     if (fields.some((f) => interests.includes(f))) {
       filtered.push(e);
@@ -460,6 +469,7 @@ async function findFutureSearchEmployers(candidate) {
     if (await hasBeenMatched(candidate.telegram_id, e.telegram_id)) continue;
     if (!workplaceMatches(candidate.workplace_pref, e.org_type)) continue;
     if (!politicalMatches(candidate.political_side, e.political_side)) continue;
+    if (!availabilityMatches(candidate.availability, e.availability)) continue;
     const fields = (e.fields || "").split(", ").map((f) => f.trim());
     if (fields.some((f) => interests.includes(f))) {
       filtered.push(e);
