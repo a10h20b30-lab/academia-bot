@@ -109,7 +109,7 @@ async function pauseCandidate(telegramId) {
 
 async function resumeCandidate(telegramId) {
   await query(
-    `UPDATE candidates SET status='active' WHERE telegram_id=$1 AND status='paused'`,
+    `UPDATE candidates SET status='active' WHERE telegram_id=$1 AND status IN ('paused', 'archived')`,
     [telegramId]
   );
 }
@@ -1269,7 +1269,8 @@ bot.on("message", async (msg) => {
         await bot.sendMessage(chatId, "שמח שחזרתם 🤝\nאחזיר אתכם לרשימה. ברגע שיהיה מישהו מתאים, אחבר.");
         return;
       }
-      if (!(await isPaused(chatId))) {
+      const cand = await getCandidateRecord(chatId);
+      if (!cand || cand.status === "active") {
         await bot.sendMessage(chatId, "כבר ברשימה שלי");
         return;
       }
@@ -1633,10 +1634,11 @@ bot.on("callback_query", async (cbQuery) => {
     await query(`UPDATE candidates SET job_source=$1 WHERE telegram_id=$2`, [source, candidateId]);
     await archiveCandidate(candidateId);
     await exportExcel();
-    await bot.sendMessage(chatId, "כיף לשמוע! 🎉 בהצלחה בתפקיד החדש. אם אי פעם תרצו לחזור — /start תמיד פתוח");
     if (source === "kozo") {
+      await bot.sendMessage(chatId, "מעולה! 🎉 שמחים שקוזו עזר — בהצלחה בתפקיד!");
       await bot.sendMessage(ADMIN_ID, `🏆 חיבור מוצלח דרך קוזו!\n\n${name} מצא עבודה דרך קוזו ✅`);
     } else {
+      await bot.sendMessage(chatId, "תודה על העדכון 🙏 בהצלחה בתפקיד החדש!");
       await bot.sendMessage(ADMIN_ID, `📦 יועץ מצא עבודה ממקום אחר: ${name}`);
     }
     delete sessions[chatId];
