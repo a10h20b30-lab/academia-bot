@@ -1565,7 +1565,7 @@ bot.on("callback_query", async (cbQuery) => {
   }
 
   if (data === "UPDATE_PROFILE") {
-    sessions[chatId] = { ...newSession("update", msg.from?.username || ""), stage: "updating" };
+    sessions[chatId] = { ...newSession("update", cbQuery.from?.username || ""), stage: "updating" };
     await bot.sendMessage(chatId, "יאללה, נעדכן את הפרטים שלך");
     await sendStep(chatId, sessions[chatId]);
     return;
