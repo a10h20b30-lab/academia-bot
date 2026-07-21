@@ -179,5 +179,13 @@ export async function initDB() {
     )
   `);
 
+  await query(`
+    CREATE TABLE IF NOT EXISTS settings (
+      key TEXT PRIMARY KEY,
+      value TEXT
+    )
+  `);
+  await query(`INSERT INTO settings (key, value) VALUES ('employer_code', 'kozo8') ON CONFLICT DO NOTHING`);
+
   console.log("✅ DB tables initialized");
 }

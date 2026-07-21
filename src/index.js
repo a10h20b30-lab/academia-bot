@@ -993,6 +993,7 @@ bot.on("message", async (msg) => {
       const newCode = text.replace("שנה קוד ", "").trim();
       if (newCode) {
         EMPLOYER_ACCESS_CODE = newCode;
+        await query(`INSERT INTO settings (key, value) VALUES ('employer_code', $1) ON CONFLICT (key) DO UPDATE SET value=$1`, [newCode]);
         await bot.sendMessage(chatId, `קוד עודכן ל-${newCode} ✅`);
       } else {
         await bot.sendMessage(chatId, "פורמט: שנה קוד [קוד חדש]");
@@ -1972,6 +1973,9 @@ function scheduleDailyBackup() {
   try {
     await initDB();
     console.log("✅ Database connected");
+    const codeRes = await query(`SELECT value FROM settings WHERE key='employer_code'`);
+    if (codeRes.rows.length > 0) EMPLOYER_ACCESS_CODE = codeRes.rows[0].value;
+    console.log("🔑 קוד מגייסים:", EMPLOYER_ACCESS_CODE);
   } catch (err) {
     console.error("❌ Database connection failed:", err.message);
     console.log("⚠️ Bot will continue without database");
