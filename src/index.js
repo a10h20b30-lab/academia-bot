@@ -94,7 +94,7 @@ async function saveRecommendationText(candidateId, text, recommenderName) {
 
 async function isPaused(telegramId) {
   const res = await query(
-    `SELECT 1 FROM candidates WHERE telegram_id=$1 AND status='paused'`,
+    `SELECT 1 FROM candidates WHERE telegram_id=$1 AND status IN ('paused', 'archived')`,
     [telegramId]
   );
   return res.rows.length > 0;
@@ -1275,7 +1275,7 @@ bot.on("message", async (msg) => {
         return;
       }
       sessions[chatId] = { ...newSession("update", msg.from?.username || ""), stage: "updating" };
-      await bot.sendMessage(chatId, "כיף שחזרת 🤝\nרק כמה עדכונים קצרים ואחזיר אותך לרשימה:");
+      await bot.sendMessage(chatId, "שמחים שחזרת 🤝 כמה עדכונים קצרים ואחזיר אותך לרשימה:");
       await sendStep(chatId, sessions[chatId]);
       return;
     }
