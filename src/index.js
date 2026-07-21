@@ -2049,41 +2049,24 @@ function scheduleWeeklySummary() {
 // ── פקודות אדמין בטקסט (טבלה / סטטוס) ──────────────────────────────────────
 
 async function sendStatus() {
-  const [candidatesRes, employersRes, matchesRes, archivedRes] = await Promise.all([
-    query(`SELECT telegram_id, status FROM candidates`),
-    query(`SELECT telegram_id, status FROM employers`),
-    query(`SELECT status, matched_at FROM matches`),
-    query(`SELECT COUNT(*) FROM candidates WHERE status='archived'`),
+  const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  const [activeCRes, pausedCRes, activeERes, pausedERes, archivedRes, matchesTotalRes, matchesWeekRes] = await Promise.all([
+    query(`SELECT COUNT(DISTINCT telegram_id) FROM candidates WHERE status='active'`),
+    query(`SELECT COUNT(DISTINCT telegram_id) FROM candidates WHERE status='paused'`),
+    query(`SELECT COUNT(DISTINCT telegram_id) FROM employers  WHERE status='active'`),
+    query(`SELECT COUNT(DISTINCT telegram_id) FROM employers  WHERE status='paused'`),
+    query(`SELECT COUNT(DISTINCT telegram_id) FROM candidates WHERE status='archived'`),
+    query(`SELECT COUNT(*) FROM matches`),
+    query(`SELECT COUNT(*) FROM matches WHERE matched_at >= $1`, [oneWeekAgo]),
   ]);
 
-  const candidates = candidatesRes.rows;
-  const employers  = employersRes.rows;
-  const matches    = matchesRes.rows;
+  const activeCands   = Number(activeCRes.rows[0].count);
+  const pausedCands   = Number(pausedCRes.rows[0].count);
+  const activeEmps    = Number(activeERes.rows[0].count);
+  const pausedEmps    = Number(pausedERes.rows[0].count);
   const archivedCount = Number(archivedRes.rows[0].count);
-
-  const uniqueCandIds = [...new Set(candidates.map((c) => c.telegram_id))];
-  const uniqueEmpIds  = [...new Set(employers.map((e) => e.telegram_id))];
-
-  const activeCands  = uniqueCandIds.filter((id) => {
-    const recs = candidates.filter((c) => c.telegram_id === id);
-    return recs.some((r) => r.status === "active");
-  }).length;
-  const pausedCands  = uniqueCandIds.filter((id) => {
-    const recs = candidates.filter((c) => c.telegram_id === id);
-    return recs.every((r) => r.status === "paused");
-  }).length;
-
-  const activeEmps   = uniqueEmpIds.filter((id) => {
-    const recs = employers.filter((e) => e.telegram_id === id);
-    return recs.some((r) => r.status === "active");
-  }).length;
-  const pausedEmps   = uniqueEmpIds.filter((id) => {
-    const recs = employers.filter((e) => e.telegram_id === id);
-    return recs.every((r) => r.status === "paused");
-  }).length;
-
-  const oneWeekAgo  = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-  const matchesWeek = matches.filter((m) => new Date(m.matched_at) >= oneWeekAgo).length;
+  const matchesTotal  = Number(matchesTotalRes.rows[0].count);
+  const matchesWeek   = Number(matchesWeekRes.rows[0].count);
 
   const msg_text =
     `📊 *סטטוס קוזו*\n\n` +
@@ -2094,7 +2077,7 @@ async function sendStatus() {
     `פעילים: ${activeEmps}\n` +
     `מושהים: ${pausedEmps}\n\n` +
     `🔗 *התאמות*\n` +
-    `סה"כ: ${matches.length}\n` +
+    `סה"כ: ${matchesTotal}\n` +
     `השבוע: ${matchesWeek}\n\n` +
     `🎉 *מצאו עבודה*: ${archivedCount}`;
 
