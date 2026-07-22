@@ -980,7 +980,7 @@ async function finishSession(chatId, session) {
   await saveRecord(session.type, chatId, session.username, session.data);
 
   if (session.type === "candidate") {
-    await bot.sendMessage(ADMIN_ID, `📥 מועמד חדש נרשם!\n\n${formatRecord("candidate", session)}`);
+    await bot.sendMessage(ADMIN_ID, `📥 מועמד חדש נרשם!\n🆔 ID: ${chatId}\n📋 סוג: יועץ\n\n${formatRecord("candidate", session)}`);
     if (session.data.cv) {
       if (session.data.cv.startsWith("file_id:")) {
         await bot.sendDocument(ADMIN_ID, session.data.cv.replace("file_id:", ""), {}, { caption: "קורות חיים" });
@@ -1052,7 +1052,7 @@ async function finishSession(chatId, session) {
       }
     );
   } else {
-    await bot.sendMessage(ADMIN_ID, `📥 לשכה חדשה נרשמה!\n\n${formatRecord("employer", session)}`);
+    await bot.sendMessage(ADMIN_ID, `📥 לשכה חדשה נרשמה!\n🆔 ID: ${chatId}\n📋 סוג: מגייס\n\n${formatRecord("employer", session)}`);
 
     // חיפוש התאמות מיידי — חיבור אוטומטי
     const newEmployer = await getEmployerRecord(chatId);
@@ -1157,18 +1157,28 @@ bot.onText(/\/profile/, async (msg) => {
 
 bot.onText(/\/update/, async (msg) => {
   const chatId = msg.chat.id;
-  sessions[chatId] = { ...newSession("update", msg.from?.username || ""), stage: "updating" };
-  await bot.sendMessage(chatId, "יאללה, נעדכן את הפרטים שלך");
+  const isEmpUpdate = !!(await getEmployerRecord(chatId));
+  const updateType = isEmpUpdate ? "employer_update" : "update";
+  sessions[chatId] = { ...newSession(updateType, msg.from?.username || ""), stage: "updating" };
+  await bot.sendMessage(chatId, isEmpUpdate ? "כמה עדכונים קצרים:" : "יאללה, נעדכן את הפרטים שלך");
   await sendStep(chatId, sessions[chatId]);
 });
 
 bot.onText(/\/pause/, async (msg) => {
   const chatId = msg.chat.id;
-  await pauseCandidate(chatId);
-  await exportExcel();
-  await bot.sendMessage(chatId, "הבנתי.\nעצרתי. כשתרצו לחזור — כתבו /resume", { parse_mode: "Markdown" });
-  const pausedCand = await getCandidateRecord(chatId);
-  await bot.sendMessage(ADMIN_ID, `⏸ השהה/תה את עצמו/ה\n👤 שם: ${pausedCand?.full_name || "—"}\n🆔 ID: ${chatId}\n📋 סוג: יועץ`);
+  const empPause = await getEmployerRecord(chatId);
+  if (empPause) {
+    await pauseEmployer(chatId);
+    await exportExcel();
+    await bot.sendMessage(chatId, "הבנתי.\nעצרתי. כשתרצו לחזור — כתבו /resume", { parse_mode: "Markdown" });
+    await bot.sendMessage(ADMIN_ID, `⏸ השהה/תה את עצמו/ה\n👤 שם: ${empPause.contact_name || "—"}\n🆔 ID: ${chatId}\n📋 סוג: מגייס`);
+  } else {
+    await pauseCandidate(chatId);
+    await exportExcel();
+    await bot.sendMessage(chatId, "הבנתי.\nעצרתי. כשתרצו לחזור — כתבו /resume", { parse_mode: "Markdown" });
+    const pausedCand = await getCandidateRecord(chatId);
+    await bot.sendMessage(ADMIN_ID, `⏸ השהה/תה את עצמו/ה\n👤 שם: ${pausedCand?.full_name || "—"}\n🆔 ID: ${chatId}\n📋 סוג: יועץ`);
+  }
 });
 
 bot.onText(/\/resume/, async (msg) => {
@@ -1510,8 +1520,10 @@ bot.on("message", async (msg) => {
     }
 
     if (lower.includes("עדכן פרטים")) {
-      sessions[chatId] = { ...newSession("update", msg.from?.username || ""), stage: "updating" };
-      await bot.sendMessage(chatId, "יאללה, נעדכן את הפרטים שלך");
+      const isEmpText = !!(await getEmployerRecord(chatId));
+      const textUpdateType = isEmpText ? "employer_update" : "update";
+      sessions[chatId] = { ...newSession(textUpdateType, msg.from?.username || ""), stage: "updating" };
+      await bot.sendMessage(chatId, isEmpText ? "כמה עדכונים קצרים:" : "יאללה, נעדכן את הפרטים שלך");
       await sendStep(chatId, sessions[chatId]);
       return;
     }
@@ -1702,21 +1714,25 @@ bot.on("callback_query", async (cbQuery) => {
       `UPDATE access_requests SET status='approved', approved_at=NOW() WHERE telegram_id=$1`,
       [Number(targetChatId)]
     );
+    const arApprove = await query(`SELECT full_name FROM access_requests WHERE telegram_id=$1 LIMIT 1`, [Number(targetChatId)]);
+    const arApproveName = arApprove.rows[0]?.full_name || "—";
     await bot.sendMessage(Number(targetChatId), "אושר! 🎉\nשלח /start ונתחיל 🤝");
-    await bot.sendMessage(ADMIN_ID, `✅ אושר! נייד ${phone} נוסף לרשימה.`);
+    await bot.sendMessage(ADMIN_ID, `✅ אושר — ${arApproveName} | 🆔 ID: ${targetChatId} | 📱 נייד: ${phone}`);
     return;
   }
 
   // דחיית גישה
   if (data.startsWith("DENY_ACCESS_")) {
     const targetChatId = data.split("_")[2];
-    // עדכן סטטוס בקשה
+    const arDeny = await query(`SELECT full_name, phone FROM access_requests WHERE telegram_id=$1 LIMIT 1`, [Number(targetChatId)]);
+    const arDenyName = arDeny.rows[0]?.full_name || "—";
+    const arDenyPhone = arDeny.rows[0]?.phone || "—";
     await query(
       `UPDATE access_requests SET status='denied', denied_at=NOW() WHERE telegram_id=$1`,
       [Number(targetChatId)]
     );
     await bot.sendMessage(Number(targetChatId), "מצטערים, הפעם לא הצלחנו לאשר 🙏\nלפניה ישירה: wa.me/972548028082");
-    await bot.sendMessage(ADMIN_ID, "❌ הבקשה נדחתה.");
+    await bot.sendMessage(ADMIN_ID, `❌ נדחה — ${arDenyName} | 🆔 ID: ${targetChatId} | 📱 נייד: ${arDenyPhone}`);
     return;
   }
 
@@ -1806,8 +1822,11 @@ bot.on("callback_query", async (cbQuery) => {
   }
 
   if (data === "UPDATE_PROFILE") {
-    sessions[chatId] = { ...newSession("update", cbQuery.from?.username || ""), stage: "updating" };
-    await bot.sendMessage(chatId, "יאללה, נעדכן את הפרטים שלך");
+    const isEmpUp = !!(await getEmployerRecord(chatId));
+    const upType  = isEmpUp ? "employer_update" : "update";
+    const upPrompt = isEmpUp ? "כמה עדכונים קצרים:" : "יאללה, נעדכן את הפרטים שלך";
+    sessions[chatId] = { ...newSession(upType, cbQuery.from?.username || ""), stage: "updating" };
+    await bot.sendMessage(chatId, upPrompt);
     await sendStep(chatId, sessions[chatId]);
     return;
   }
