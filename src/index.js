@@ -5,6 +5,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import * as XLSX from "xlsx";
 import { query, initDB } from "./db.js";
+import { startMonitor } from "./monitor.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -2459,6 +2460,7 @@ async function deactivateInactiveEmployers() {
   scheduleApiHealthCheck();
   await checkScheduledTasks();
   setInterval(checkScheduledTasks, 60 * 1000);
+  startMonitor().catch((err) => console.error("Monitor startup error:", err.message));
   console.log("🟢 קוזו bot פועל בטלגרם...");
 })();
 
