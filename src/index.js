@@ -541,8 +541,8 @@ async function sendMatchSummary(candidates, employer, notifyCandidates = true) {
   keyboard.push([{ text: "הפסק לקבל הצעות 🔕", callback_data: `STOP_OFFERS_EMPLOYER_${employerId}` }]);
 
   const employerHeader = candidates.length === 1
-    ? "יועץ/ת חדש/ה הצטרף/ה לקוזו ונראה שאתם מתאימים 👋\n\nברגע שיצטרפו עוד מתאימים — תקבלו עדכון נוסף 🤝"
-    : `${candidates.length} אנשי מקצוע חדשים הצטרפו לקוזו ונראה שאתם מתאימים 👋\n\nברגע שיצטרפו עוד מתאימים — תקבלו עדכון נוסף 🤝`;
+    ? "יועץ/ת חדש/ה הצטרף/ה לקוזו ונראה שאתם מתאימים 👋"
+    : `${candidates.length} אנשי מקצוע חדשים הצטרפו לקוזו ונראה שאתם מתאימים 👋`;
   await bot.sendMessage(
     employerId,
     employerHeader,
