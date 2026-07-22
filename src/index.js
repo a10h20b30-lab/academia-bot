@@ -262,12 +262,12 @@ async function saveRecord(type, chatId, username, data) {
         telegram_id, telegram_username,
         org_type, contact_name, phone, email,
         fields, timing, availability, experience_importance,
-        notes, political_side, requires_license, english_required, irregular_hours, future_search, declaration
+        notes, political_side, requires_license, english_required, future_search, declaration
       ) VALUES (
         $1, $2,
         $3, $4, $5, $6,
         $7, $8, $9, $10,
-        $11, $12, $13, $14, $15, $16, $17
+        $11, $12, $13, $14, $15, $16
       )`,
       [
         chatId, username || "",
@@ -275,7 +275,7 @@ async function saveRecord(type, chatId, username, data) {
         data.email || "", data.fields || "", data.timing || "",
         data.availability || "", data.experience_importance || "",
         data.notes || "", data.political_side || "", data.requires_license || "",
-        data.english_required || "", data.irregular_hours || "", data.future_search || "", data.declaration || "",
+        data.english_required || "", data.future_search || "", data.declaration || "",
       ]
     );
   }
@@ -512,8 +512,9 @@ async function sendMatchSummary(candidates, employer, notifyCandidates = true) {
 
   const keyboard = candidates.map((c) => {
     const score = calcMatchScore(c, employer);
+    const internBadge = c.is_intern === "כן ✅" ? " 🏛" : "";
     return [{
-      text: `⭐ ${score}% התאמה — ${c.full_name || "מועמד"}`,
+      text: `⭐ ${score}% — ${c.full_name || "מועמד"}${internBadge}`,
       callback_data: `CV_${c.telegram_id}_${employerId}`,
     }];
   });
@@ -853,7 +854,6 @@ const EMPLOYER_STEPS = [
   { key: "political_side",        question: "קואליציה או אופוזיציה?",                                                          type: "single", options: [["קואליציה", "אופוזיציה"], ["לא רלוונטי"]] },
   { key: "requires_license",      question: "האם נדרש רישיון נהיגה?",                                                          type: "single", options: [["חובה", "יתרון"], ["לא נדרש"]] },
   { key: "english_required",      question: "האם נדרשת אנגלית?",                                                               type: "single", options: [["ברמה גבוהה", "בסיסית"], ["לא נדרש"]] },
-  { key: "irregular_hours",       question: "האם נדרשת זמינות בשעות לא שגרתיות?",                                             type: "single", options: [["כן", "לא"]] },
   { key: "future_search",         question: "האם תרצו להישאר במאגר לחיפושים עתידיים?",                                        type: "single", options: [["כן", "לא"]] },
   { key: "declaration",           question: "רק לידיעה. הפרטים ישמשו להתאמה מקצועית בלבד. אין בזה התחייבות מאף צד 🤝",       type: "single", options: [["מאשר ✅"]] },
 ];
@@ -1682,7 +1682,23 @@ bot.on("callback_query", async (cbQuery) => {
     const internshipLine = candidate.is_intern === "כן ✅" && candidate.internship_mentor
       ? `\n🏛 התמחות: דוברות הכנסת — שנה | אצל: ${candidate.internship_mentor}`
       : "";
-    const cvCaption = `קורות חיים — ${candidate.full_name || "מועמד"}${internshipLine}`;
+    const referencesLine = candidate.has_references === "כן ✅" && candidate.references
+      ? `\n⭐ ממליצים: ${candidate.references}`
+      : "";
+    const degreeText = candidate.degree && candidate.degree !== "אין תואר"
+      ? `${candidate.degree} — ${candidate.field_of_study || ""}`
+      : (candidate.certificate_field ? `תעודה: ${candidate.certificate_field}` : "אין תואר");
+    const card =
+      `👤 ${candidate.full_name || "מועמד"}\n` +
+      `📍 ${candidate.city || ""}\n` +
+      `🎓 ${degreeText}\n` +
+      `💼 ${candidate.experience || ""}\n` +
+      `🔍 תחומים: ${candidate.interests || ""}\n` +
+      `📅 זמין: ${candidate.timing || ""} | ${candidate.availability || ""}` +
+      internshipLine +
+      referencesLine;
+    await bot.sendMessage(chatId, card);
+    const cvCaption = `קורות חיים — ${candidate.full_name || "מועמד"}`;
     if (candidate.cv.startsWith("file_id:")) {
       await bot.sendDocument(chatId, candidate.cv.replace("file_id:", ""), {}, { caption: cvCaption });
     } else if (candidate.cv.startsWith("photo_id:")) {
