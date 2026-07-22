@@ -516,14 +516,14 @@ async function sendMatchSummary(candidates, employer, notifyCandidates = true) {
     await recordMatch(candidate.telegram_id, employerId, candidate.full_name || "מועמד", employer.contact_name || "לשכה");
     if (notifyCandidates) {
       const orgType = employer.org_type || "";
-      const orgLabel =
-        orgType === "כנסת"                    ? "ללשכת כנסת" :
-        orgType === "עירייה"                  ? "לעירייה"    :
-        orgType === 'משרד יח"צ / סושיאל'     ? "למשרד"      :
-                                                "לגוף מתאים";
+      const orgMsg =
+        orgType === "כנסת"                    ? "לשכת כנסת חדשה הצטרפה לקוזו ונראה שאתם מתאימים — העברנו את הפרטים שלך. במידה וזה יהיה רלוונטי, ייצרו איתך קשר 🤝" :
+        orgType === "עירייה"                  ? "עירייה חדשה הצטרפה לקוזו ונראה שאתם מתאימים — העברנו את הפרטים שלך. במידה וזה יהיה רלוונטי, ייצרו איתך קשר 🤝"    :
+        orgType === 'משרד יח"צ / סושיאל'     ? "משרד חדש הצטרף לקוזו ונראה שאתם מתאימים — העברנו את הפרטים שלך. במידה וזה יהיה רלוונטי, ייצרו איתך קשר 🤝"      :
+                                                "גוף חדש הצטרף לקוזו ונראה שאתם מתאימים — העברנו את הפרטים שלך. במידה וזה יהיה רלוונטי, ייצרו איתך קשר 🤝";
       await bot.sendMessage(
         candidate.telegram_id,
-        `היי, העברתי את הפרטים שלך ${orgLabel}. במידה וזה יהיה רלוונטי — ייצרו איתך קשר 🤝`,
+        orgMsg,
         { reply_markup: { inline_keyboard: [[{ text: "הפסק לקבל הצעות 🔕", callback_data: `STOP_OFFERS_CANDIDATE_${candidate.telegram_id}` }]] } }
       );
     }
