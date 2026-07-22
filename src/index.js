@@ -1151,7 +1151,8 @@ bot.on("message", async (msg) => {
         "🎯 התאמות — מגייסים שקיבלו רשימת מועמדים\n" +
         "📞 יצירת קשר — מגייסים שלחצו קורות חיים\n" +
         "🔗 חיבורים — מגייסים שאישרו יצירת קשר\n" +
-        "🗑 מחק [ID] — מחיקת משתמש מהמערכת"
+        "🗑 מחק [ID] — מחיקת משתמש מהמערכת\n" +
+        "🔍 חפש [שם] — חיפוש משתמש לפי שם"
       );
       return;
     }
@@ -1187,6 +1188,30 @@ bot.on("message", async (msg) => {
       ]);
       await exportExcel();
       await bot.sendMessage(chatId, `✅ המשתמש ${targetId} נמחק מהמערכת`);
+      return;
+    }
+    if (text.startsWith("חפש ")) {
+      const searchName = text.replace("חפש ", "").trim();
+      if (!searchName) { await bot.sendMessage(chatId, "פורמט: חפש [שם]"); return; }
+      const [candsRes, empsRes] = await Promise.all([
+        query(`SELECT telegram_id, full_name, status FROM candidates WHERE full_name ILIKE $1 ORDER BY full_name`, [`%${searchName}%`]),
+        query(`SELECT telegram_id, contact_name, status FROM employers WHERE contact_name ILIKE $1 ORDER BY contact_name`, [`%${searchName}%`]),
+      ]);
+      if (candsRes.rows.length === 0 && empsRes.rows.length === 0) {
+        await bot.sendMessage(chatId, `לא נמצאו תוצאות עבור '${searchName}'`);
+        return;
+      }
+      const statusLabel = (s) => s === "active" ? "פעיל" : s === "paused" ? "מושהה" : s === "archived" ? "ארכיון" : s;
+      let msg = `🔍 תוצאות חיפוש עבור '${searchName}':\n`;
+      if (candsRes.rows.length > 0) {
+        msg += `\n👤 יועצים:\n`;
+        msg += candsRes.rows.map(r => `- ${r.full_name} — ID: ${r.telegram_id} — ${statusLabel(r.status)}`).join("\n");
+      }
+      if (empsRes.rows.length > 0) {
+        msg += `\n\n🏛 מגייסים:\n`;
+        msg += empsRes.rows.map(r => `- ${r.contact_name} — ID: ${r.telegram_id} — ${statusLabel(r.status)}`).join("\n");
+      }
+      await bot.sendMessage(chatId, msg);
       return;
     }
     if (text === "טבלה") { await sendExcel(); return; }
