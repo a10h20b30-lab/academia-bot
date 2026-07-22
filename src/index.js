@@ -156,6 +156,18 @@ async function getEmployerRecord(telegramId) {
   return res.rows[0] || null;
 }
 
+async function updateEmployerRecord(telegramId, updates) {
+  const ALLOWED_COLUMNS = ["fields", "timing", "availability", "notes"];
+  const keys = Object.keys(updates).filter((k) => ALLOWED_COLUMNS.includes(k));
+  if (keys.length === 0) return;
+  const setClauses = keys.map((k, i) => `${k}=$${i + 2}`).join(", ");
+  const values = keys.map((k) => updates[k]);
+  await query(
+    `UPDATE employers SET ${setClauses}, updated_at=NOW() WHERE telegram_id=$1`,
+    [telegramId, ...values]
+  );
+}
+
 async function updateCandidateRecord(telegramId, updates) {
   const ALLOWED_COLUMNS = [
     "full_name", "phone", "email", "city", "degree", "field_of_study",
@@ -866,10 +878,18 @@ const UPDATE_STEPS = [
   { key: "availability", question: "מה היקף המשרה המבוקש?",                                                                    type: "single", options: [["משרה מלאה", "משרה חלקית"], ["פרילנס", "פתוח לכל הצעה"]] },
 ];
 
+const EMPLOYER_UPDATE_STEPS = [
+  { key: "fields",       question: "מה התחום שאתם מחפשים כעת?\nאפשר לסמן כמה ולחץ סיום ✓", type: "multi",  options: [["ייעוץ פרלמנטרי", "דוברות"], ["סושיאל ורשתות חברתיות", "יועץ פוליטי"], ["עריכת וידאו", "עיצוב גרפי"], ["ניהול לשכה", "סיום ✓"]] },
+  { key: "timing",       question: "מתי נדרש התפקיד?",                                        type: "single", options: [["מיידי", "בחודש הקרוב"], ["גמיש / פתוח"]] },
+  { key: "availability", question: "היקף המשרה?",                                             type: "single", options: [["משרה מלאה", "משרה חלקית"], ["פרילנס", "פתוח לכל הצעה"]] },
+  { key: "notes",        question: "דגשים נוספים?\nגם 'אין' זה תשובה",                       type: "text"   },
+];
+
 function getSteps(type) {
-  if (type === "candidate") return CANDIDATE_STEPS;
-  if (type === "employer")  return EMPLOYER_STEPS;
-  if (type === "update")    return UPDATE_STEPS;
+  if (type === "candidate")      return CANDIDATE_STEPS;
+  if (type === "employer")       return EMPLOYER_STEPS;
+  if (type === "update")         return UPDATE_STEPS;
+  if (type === "employer_update") return EMPLOYER_UPDATE_STEPS;
   return [];
 }
 
@@ -937,6 +957,23 @@ async function finishSession(chatId, session) {
       await bot.sendMessage(chatId, `מעודכן! 🤝\nהעברתי את הפרופיל המעודכן שלך ל-${matchingEmployers.length} גופים מתאימים.`);
     } else {
       await bot.sendMessage(chatId, "מעודכן! 🤝\nחזרת לרשימה. ברגע שתהיה התאמה, אחבר.");
+    }
+    delete sessions[chatId];
+    return;
+  }
+
+  if (session.type === "employer_update") {
+    await updateEmployerRecord(chatId, session.data);
+    await resumeEmployer(chatId);
+    await exportExcel();
+    await bot.sendMessage(ADMIN_ID, `🔄 מגייס חזר לפעילות (ID: ${chatId})\n${JSON.stringify(session.data, null, 2)}`);
+    const updatedEmployer = await getEmployerRecord(chatId);
+    const matches = updatedEmployer ? await findMatches(updatedEmployer) : [];
+    if (matches.length > 0) {
+      await sendMatchSummary(matches, updatedEmployer, true);
+      await bot.sendMessage(chatId, `מצוין! 🤝 חזרתם לרשימה. מצאתי ${matches.length} מועמדים מתאימים.`);
+    } else {
+      await bot.sendMessage(chatId, "חזרתם לרשימה 🤝 ברגע שיירשם מישהו מתאים — תשמעו ממני.");
     }
     delete sessions[chatId];
     return;
@@ -1136,8 +1173,9 @@ bot.onText(/\/pause/, async (msg) => {
 bot.onText(/\/resume/, async (msg) => {
   const chatId = msg.chat.id;
   if (await isEmployerPaused(chatId)) {
-    await resumeEmployer(chatId);
-    await bot.sendMessage(chatId, "שמח שחזרתם 🤝\nאחזיר אתכם לרשימה. ברגע שיהיה מישהו מתאים, אחבר.");
+    sessions[chatId] = { ...newSession("employer_update", msg.from?.username || ""), stage: "updating" };
+    await bot.sendMessage(chatId, "שמחים שחזרתם 🤝 כמה עדכונים קצרים ואחזיר אתכם לרשימה:");
+    await sendStep(chatId, sessions[chatId]);
     return;
   }
   const cand = await getCandidateRecord(chatId);
@@ -1431,8 +1469,9 @@ bot.on("message", async (msg) => {
 
     if (lower.includes("החזר אותי לפעילות")) {
       if (await isEmployerPaused(chatId)) {
-        await resumeEmployer(chatId);
-        await bot.sendMessage(chatId, "שמח שחזרתם 🤝\nאחזיר אתכם לרשימה. ברגע שיהיה מישהו מתאים, אחבר.");
+        sessions[chatId] = { ...newSession("employer_update", msg.from?.username || ""), stage: "updating" };
+        await bot.sendMessage(chatId, "שמחים שחזרתם 🤝 כמה עדכונים קצרים ואחזיר אתכם לרשימה:");
+        await sendStep(chatId, sessions[chatId]);
         return;
       }
       const cand = await getCandidateRecord(chatId);
