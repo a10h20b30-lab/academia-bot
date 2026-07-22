@@ -56,7 +56,11 @@ function buildProfileMessage(cand) {
     `שם: ${cand.full_name || ""}`,
     `מייל: ${cand.email || ""}`,
     `עיר: ${cand.city || ""}`,
-    `תואר: ${cand.degree || ""} — ${cand.field_of_study || ""}`,
+    cand.degree !== "אין תואר"
+      ? `תואר: ${cand.degree || ""} — ${cand.field_of_study || ""}`
+      : `תואר: אין תואר`,
+    ...(cand.has_certificate === "כן ✅" && cand.certificate_field
+      ? [`תעודה מקצועית: ${cand.certificate_field}`] : []),
     `שפות: ${cand.languages || ""}`,
     ...(cand.is_intern === "כן ✅" && cand.internship_mentor ? [`🏛 התמחות: דוברות הכנסת — שנה | אצל: ${cand.internship_mentor}`] : []),
     `ניסיון: ${cand.experience || ""}`,
@@ -155,6 +159,7 @@ async function getEmployerRecord(telegramId) {
 async function updateCandidateRecord(telegramId, updates) {
   const ALLOWED_COLUMNS = [
     "full_name", "phone", "email", "city", "degree", "field_of_study",
+    "has_certificate", "certificate_field",
     "languages", "is_intern", "internship_mentor",
     "experience", "interests", "workplace_pref", "timing", "availability",
     "cv", "motivation", "has_references", "references", "declaration", "status",
@@ -221,6 +226,7 @@ async function saveRecord(type, chatId, username, data) {
       `INSERT INTO candidates (
         telegram_id, telegram_username,
         full_name, phone, email, city, degree, field_of_study,
+        has_certificate, certificate_field,
         languages, is_intern, internship_mentor,
         experience, interests, workplace_pref, timing, availability,
         cv, motivation, has_references, "references",
@@ -229,16 +235,18 @@ async function saveRecord(type, chatId, username, data) {
       ) VALUES (
         $1, $2,
         $3, $4, $5, $6, $7, $8,
-        $9, $10, $11,
-        $12, $13, $14, $15, $16,
-        $17, $18, $19, $20,
-        $21, $22, $23,
-        $24
+        $9, $10,
+        $11, $12, $13,
+        $14, $15, $16, $17, $18,
+        $19, $20, $21, $22,
+        $23, $24, $25,
+        $26
       )`,
       [
         chatId, username || "",
         data.full_name || "", data.phone || "", data.email || "",
         data.city || "", data.degree || "", data.field_of_study || "",
+        data.has_certificate || "", data.certificate_field || "",
         data.languages || "", data.is_intern || "", data.internship_mentor || "",
         data.experience || "", data.interests || "",
         data.workplace_pref || "", data.timing || "", data.availability || "",
@@ -639,7 +647,7 @@ async function exportExcel() {
     const connected  = connectedRes.rows;
     const ratings    = ratingsRes.rows;
 
-    const CANDIDATE_HEADERS = ["תאריך","טלגרם","שם מלא","נייד","מייל","עיר","תואר","תחום לימודים","שפות","עבר התמחות","ניסיון","תחומי עניין","מקום עבודה מועדף","זמינות","קורות חיים","מוטיבציה","הצהרה","סטטוס","הוצע ל"];
+    const CANDIDATE_HEADERS = ["תאריך","טלגרם","שם מלא","נייד","מייל","עיר","תואר","תחום לימודים","תעודה","תחום תעודה","שפות","עבר התמחות","ניסיון","תחומי עניין","מקום עבודה מועדף","זמינות","קורות חיים","מוטיבציה","הצהרה","סטטוס","הוצע ל"];
     const EMPLOYER_HEADERS  = ["תאריך","טלגרם","מטעם","שם ותפקיד","נייד","מייל","תחומים","היקף","תזמון","חשיבות ניסיון","הערות","הצהרה","סטטוס"];
 
     const fmtC = (r) => ({
@@ -647,6 +655,7 @@ async function exportExcel() {
       "טלגרם": r.telegram_username ? `@${r.telegram_username}` : String(r.telegram_id || ""),
       "שם מלא": r.full_name || "", "נייד": r.phone || "", "מייל": r.email || "",
       "עיר": r.city || "", "תואר": r.degree || "", "תחום לימודים": r.field_of_study || "",
+      "תעודה": r.has_certificate || "", "תחום תעודה": r.certificate_field || "",
       "שפות": r.languages || "", "עבר התמחות": r.is_intern || "",
       "ניסיון": r.experience || "", "תחומי עניין": r.interests || "",
       "מקום עבודה מועדף": r.workplace_pref || "",
@@ -811,7 +820,9 @@ const CANDIDATE_STEPS = [
   { key: "email",             question: "כתובת מייל?",                                                                          type: "email"  },
   { key: "city",              question: "עיר מגורים?",                                                                          type: "text"   },
   { key: "degree",            question: "מה התואר?",                                                                            type: "single", options: [["תואר ראשון", "תואר שני"], ["אין תואר"]] },
-  { key: "field_of_study",    question: "מה תחום הלימודים?",                                                                    type: "text"   },
+  { key: "field_of_study",    question: "מה תחום הלימודים?",                                                                    type: "text",   conditional: "degree!=אין תואר" },
+  { key: "has_certificate",   question: "האם יש לך תעודה מקצועית?",                                                              type: "single", options: [["כן ✅", "לא ❌"]], conditional: "degree=אין תואר" },
+  { key: "certificate_field", question: "באיזה תחום התעודה?",                                                                    type: "text",   conditional: "has_certificate=כן ✅" },
   { key: "languages",         question: "באילו שפות יש שליטה?\nאפשר לסמן כמה ולחץ סיום ✓",                                  type: "multi",  options: [["עברית", "אנגלית"], ["ערבית", "רוסית"], ["אחר", "סיום ✓"]] },
   { key: "is_intern",         question: "האם עברת התמחות בכנסת?",                                                               type: "single", options: [["כן ✅", "לא ❌"]] },
   { key: "internship_mentor", question: "שם ונייד הדובר/ת שאצלו/ה התמחית",                                                       type: "text",   conditional: "is_intern=כן ✅" },
@@ -878,8 +889,17 @@ async function sendStep(chatId, session) {
 
   // דלג על שאלות conditional שלא מתקיים בהן התנאי
   while (step && step.conditional) {
-    const [condKey, condVal] = step.conditional.split("=");
-    if (session.data[condKey] !== condVal) {
+    const cond = step.conditional;
+    let condKey, condVal, negate;
+    if (cond.includes("!=")) {
+      [condKey, condVal] = cond.split("!=");
+      negate = true;
+    } else {
+      [condKey, condVal] = cond.split("=");
+      negate = false;
+    }
+    const matches = session.data[condKey] === condVal;
+    if (negate ? matches : !matches) {
       session.step++;
       step = steps[session.step];
     } else {

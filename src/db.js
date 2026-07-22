@@ -105,6 +105,8 @@ export async function initDB() {
   await query(`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS workplace_pref TEXT`);
   await query(`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS availability_status TEXT`);
   await query(`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS job_source TEXT`);
+  await query(`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS has_certificate TEXT`);
+  await query(`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS certificate_field TEXT`);
 
   await query(`
     CREATE TABLE IF NOT EXISTS approved_phones (
