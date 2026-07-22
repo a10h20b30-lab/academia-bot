@@ -1107,6 +1107,7 @@ bot.on("message", async (msg) => {
   const chatId = msg.chat.id;
   const text = msg.text?.trim();
   if (!text || text.startsWith("/")) return;
+  try {
 
   // פקודות אדמין
   if (chatId === ADMIN_ID) {
@@ -1511,6 +1512,11 @@ bot.on("message", async (msg) => {
     await bot.sendMessage(chatId, "שלח את הקובץ כצירוף, לא כתמונה 📎");
   } else {
     await bot.sendMessage(chatId, "לחץ על אחת מהאפשרויות למעלה 👆");
+  }
+  } catch (err) {
+    console.error("message handler error:", err);
+    try { await bot.sendMessage(chatId, "משהו השתבש, נסה שוב 🙏"); } catch (_) {}
+    try { await bot.sendMessage(ADMIN_ID, `❌ שגיאה ב-message handler (ID: ${chatId}, text: ${text})\n${err.message}`); } catch (_) {}
   }
 });
 
