@@ -1825,8 +1825,11 @@ bot.on("callback_query", async (cbQuery) => {
     return;
   }
   if (data === "EXISTING_UPDATE") {
-    sessions[chatId] = { ...newSession("update", ""), stage: "updating" };
-    await bot.sendMessage(chatId, "יאללה, נעדכן את הפרטים שלך");
+    const isEmp = !!(await getEmployerRecord(chatId));
+    const sessionType = isEmp ? "employer_update" : "update";
+    const prompt = isEmp ? "כמה עדכונים קצרים:" : "יאללה, נעדכן את הפרטים שלך";
+    sessions[chatId] = { ...newSession(sessionType, cbQuery.from?.username || ""), stage: "updating" };
+    await bot.sendMessage(chatId, prompt);
     await sendStep(chatId, sessions[chatId]);
     return;
   }
