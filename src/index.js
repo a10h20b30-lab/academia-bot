@@ -1172,7 +1172,12 @@ bot.onText(/\/pause/, async (msg) => {
 
 bot.onText(/\/resume/, async (msg) => {
   const chatId = msg.chat.id;
-  if (await isEmployerPaused(chatId)) {
+  const empR = await getEmployerRecord(chatId);
+  if (empR) {
+    if (empR.status === "active") {
+      await bot.sendMessage(chatId, "כבר ברשימה שלי");
+      return;
+    }
     sessions[chatId] = { ...newSession("employer_update", msg.from?.username || ""), stage: "updating" };
     await bot.sendMessage(chatId, "שמחים שחזרתם 🤝 כמה עדכונים קצרים ואחזיר אתכם לרשימה:");
     await sendStep(chatId, sessions[chatId]);
@@ -1468,7 +1473,12 @@ bot.on("message", async (msg) => {
     }
 
     if (lower.includes("החזר אותי לפעילות")) {
-      if (await isEmployerPaused(chatId)) {
+      const emp = await getEmployerRecord(chatId);
+      if (emp) {
+        if (emp.status === "active") {
+          await bot.sendMessage(chatId, "כבר ברשימה שלי");
+          return;
+        }
         sessions[chatId] = { ...newSession("employer_update", msg.from?.username || ""), stage: "updating" };
         await bot.sendMessage(chatId, "שמחים שחזרתם 🤝 כמה עדכונים קצרים ואחזיר אתכם לרשימה:");
         await sendStep(chatId, sessions[chatId]);
