@@ -189,5 +189,16 @@ export async function initDB() {
   `);
   await query(`INSERT INTO settings (key, value) VALUES ('employer_code', 'kozo8') ON CONFLICT DO NOTHING`);
 
+  await query(`
+    CREATE TABLE IF NOT EXISTS scheduled_tasks (
+      id SERIAL PRIMARY KEY,
+      task_type TEXT,
+      target_id BIGINT,
+      extra_data TEXT,
+      scheduled_for TIMESTAMPTZ,
+      done BOOLEAN DEFAULT false
+    )
+  `);
+
   console.log("✅ DB tables initialized");
 }

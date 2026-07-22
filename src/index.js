@@ -274,39 +274,210 @@ async function saveRecord(type, chatId, username, data) {
   console.log(`נשמר: ${type} | ${username || chatId}`);
 }
 
-function scheduleFollowUp(candidateId, employerId) {
-  // שולח follow-up אחרי 7 ימים
-  const delay = 7 * 24 * 60 * 60 * 1000; // 7 ימים במילישניות
-  setTimeout(async () => {
-    const res = await query(
-      `SELECT * FROM matches WHERE candidate_id=$1 AND employer_id=$2 AND status='active'`,
-      [candidateId, employerId]
-    );
-    const match = res.rows[0];
-    if (!match) return; // כבר טופל
-
-    await bot.sendMessage(
-      ADMIN_ID,
-      `📊 מעקב התאמה, שבוע עבר
-
-` +
-      `👤 מועמד: ${match.candidate_name}
-` +
-      `🏛 לשכה: ${match.employer_name}
-
-` +
-      `האם ההתאמה עדיין בתהליך?`,
-      {
-        reply_markup: {
-          inline_keyboard: [[
-            { text: "כן, בתהליך ✅", callback_data: `FOLLOWUP_YES_${candidateId}_${employerId}` },
-            { text: "לא, נגמר ❌",   callback_data: `FOLLOWUP_NO_${candidateId}_${employerId}`  },
-          ]],
-        },
-      }
-    );
-  }, delay);
+async function scheduleFollowUp(candidateId, employerId) {
+  const scheduledFor = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+  await query(
+    `INSERT INTO scheduled_tasks (task_type, target_id, extra_data, scheduled_for) VALUES ($1, $2, $3, $4)`,
+    ['follow_up', candidateId, JSON.stringify({ employerId }), scheduledFor]
+  );
 }
+
+async function scheduleCVFollowUp(candidateId, employerId, candidateName) {
+  const scheduledFor = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+  await query(
+    `INSERT INTO scheduled_tasks (task_type, target_id, extra_data, scheduled_for) VALUES ($1, $2, $3, $4)`,
+    ['cv_followup', candidateId, JSON.stringify({ employerId, candidateName }), scheduledFor]
+  );
+}
+
+async function scheduleRatingRequest(employerId, candidateId, candidateName) {
+  const scheduledFor = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
+  await query(
+    `INSERT INTO scheduled_tasks (task_type, target_id, extra_data, scheduled_for) VALUES ($1, $2, $3, $4)`,
+    ['rating_request', employerId, JSON.stringify({ candidateId, candidateName }), scheduledFor]
+  );
+}
+
+async function scheduleCandidateNudge(candidateId) {
+  const scheduledFor = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
+  await query(
+    `INSERT INTO scheduled_tasks (task_type, target_id, extra_data, scheduled_for) VALUES ($1, $2, $3, $4)`,
+    ['candidate_nudge', candidateId, null, scheduledFor]
+  );
+}
+
+async function scheduleEmployerListFollowUp(employerId) {
+  const scheduledFor = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+  await query(
+    `INSERT INTO scheduled_tasks (task_type, target_id, extra_data, scheduled_for) VALUES ($1, $2, $3, $4)`,
+    ['employer_list_followup', employerId, null, scheduledFor]
+  );
+}
+
+async function scheduleMonthlyCheckin(candidateId) {
+  const scheduledFor = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+  await query(
+    `INSERT INTO scheduled_tasks (task_type, target_id, extra_data, scheduled_for) VALUES ($1, $2, $3, $4)`,
+    ['monthly_checkin', candidateId, null, scheduledFor]
+  );
+}
+
+async function scheduleBimonthlyReminder(candidateId) {
+  const scheduledFor = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000);
+  await query(
+    `INSERT INTO scheduled_tasks (task_type, target_id, extra_data, scheduled_for) VALUES ($1, $2, $3, $4)`,
+    ['bimonthly_reminder', candidateId, null, scheduledFor]
+  );
+}
+
+async function runTask(task) {
+  const extra = task.extra_data ? JSON.parse(task.extra_data) : {};
+  switch (task.task_type) {
+    case 'follow_up': {
+      const { employerId } = extra;
+      const res = await query(
+        `SELECT * FROM matches WHERE candidate_id=$1 AND employer_id=$2 AND status='active'`,
+        [task.target_id, employerId]
+      );
+      const match = res.rows[0];
+      if (!match) break;
+      await bot.sendMessage(
+        ADMIN_ID,
+        `📊 מעקב התאמה, שבוע עבר\n\n👤 מועמד: ${match.candidate_name}\n🏛 לשכה: ${match.employer_name}\n\nהאם ההתאמה עדיין בתהליך?`,
+        {
+          reply_markup: {
+            inline_keyboard: [[
+              { text: "כן, בתהליך ✅", callback_data: `FOLLOWUP_YES_${task.target_id}_${employerId}` },
+              { text: "לא, נגמר ❌",   callback_data: `FOLLOWUP_NO_${task.target_id}_${employerId}`  },
+            ]],
+          },
+        }
+      );
+      break;
+    }
+    case 'cv_followup': {
+      const { employerId, candidateName } = extra;
+      const res = await query(
+        `SELECT status FROM cv_requests WHERE employer_id=$1 AND candidate_id=$2`,
+        [employerId, task.target_id]
+      );
+      const req = res.rows[0];
+      if (!req || req.status === "connected" || req.status === "rejected") break;
+      await bot.sendMessage(
+        employerId,
+        `מה קרה עם ${candidateName}?`,
+        {
+          reply_markup: {
+            inline_keyboard: [[
+              { text: "✅ יצרתי קשר",  callback_data: `CVFOLLOWUP_CONTACTED_${task.target_id}_${employerId}` },
+              { text: "⏳ עוד בתהליך", callback_data: `CVFOLLOWUP_INPROGRESS_${task.target_id}_${employerId}` },
+              { text: "❌ לא מתאים",   callback_data: `CVFOLLOWUP_NOTSUITABLE_${task.target_id}_${employerId}` },
+            ]],
+          },
+        }
+      );
+      break;
+    }
+    case 'rating_request': {
+      const { candidateId, candidateName } = extra;
+      await bot.sendMessage(
+        task.target_id,
+        `איך יצא החיבור עם ${candidateName}? ⭐`,
+        {
+          reply_markup: {
+            inline_keyboard: [[
+              { text: "⭐⭐⭐⭐⭐", callback_data: `RATING_5_${task.target_id}_${candidateId}` },
+              { text: "⭐⭐⭐",    callback_data: `RATING_3_${task.target_id}_${candidateId}` },
+              { text: "⭐",       callback_data: `RATING_1_${task.target_id}_${candidateId}` },
+            ]],
+          },
+        }
+      );
+      break;
+    }
+    case 'candidate_nudge': {
+      const cand = await getCandidateRecord(task.target_id);
+      if (!cand || cand.status !== "active") break;
+      const res = await query(`SELECT 1 FROM cv_requests WHERE candidate_id=$1 LIMIT 1`, [task.target_id]);
+      if (res.rows.length > 0) break;
+      await bot.sendMessage(task.target_id, "הפרופיל שלך פעיל אצלנו, עדיין מחפשים עבורך. ברגע שיהיה התאמה — תשמע ממני.");
+      break;
+    }
+    case 'employer_list_followup': {
+      const emp = await getEmployerRecord(task.target_id);
+      if (!emp || emp.status !== "active") break;
+      const res = await query(`SELECT 1 FROM cv_requests WHERE employer_id=$1 LIMIT 1`, [task.target_id]);
+      if (res.rows.length > 0) break;
+      await bot.sendMessage(
+        task.target_id,
+        "עדיין מחפשים? הרשימה עדיין פעילה.",
+        {
+          reply_markup: {
+            inline_keyboard: [[
+              { text: "כן, עוד מחפשים", callback_data: `EMPLIST_STILL_${task.target_id}` },
+              { text: "לא, מצאנו",       callback_data: `EMPLIST_FOUND_${task.target_id}` },
+            ]],
+          },
+        }
+      );
+      break;
+    }
+    case 'monthly_checkin': {
+      const cand = await getCandidateRecord(task.target_id);
+      if (!cand || cand.status !== "active") break;
+      await bot.sendMessage(
+        task.target_id,
+        "חודש עבר מאז שנרשמת. מה הסטטוס?",
+        {
+          reply_markup: {
+            inline_keyboard: [[
+              { text: "עדיין מחפש",   callback_data: `CHECKIN_STILL_${task.target_id}` },
+              { text: "מצאתי עבודה", callback_data: `CHECKIN_FOUND_${task.target_id}` },
+            ]],
+          },
+        }
+      );
+      break;
+    }
+    case 'bimonthly_reminder': {
+      const cand = await getCandidateRecord(task.target_id);
+      if (!cand || cand.status !== "active") break;
+      await bot.sendMessage(
+        task.target_id,
+        "היי, עדיין מחפש הזדמנות? 👋\nהפרופיל שלך פעיל — רק רוצים לוודא שהמידע עדכני.",
+        {
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: "כן, עדיין מחפש",  callback_data: `CHECKIN_STILL_${task.target_id}` }],
+              [{ text: "עדכן פרטים",       callback_data: "EXISTING_UPDATE" }],
+              [{ text: "מצאתי עבודה 🎉",  callback_data: `CHECKIN_FOUND_${task.target_id}` }],
+            ],
+          },
+        }
+      );
+      break;
+    }
+  }
+}
+
+async function checkScheduledTasks() {
+  try {
+    const res = await query(
+      `SELECT * FROM scheduled_tasks WHERE done=false AND scheduled_for <= NOW()`
+    );
+    for (const task of res.rows) {
+      try {
+        await runTask(task);
+      } catch (err) {
+        console.error(`runTask error (id=${task.id} type=${task.task_type}):`, err.message);
+      }
+      await query(`UPDATE scheduled_tasks SET done=true WHERE id=$1`, [task.id]);
+    }
+  } catch (err) {
+    console.error("checkScheduledTasks error:", err.message);
+  }
+}
+
 
 // ── חיבורים ──────────────────────────────────────────────────────────────────
 
@@ -354,149 +525,7 @@ async function sendMatchSummary(candidates, employer, notifyCandidates = true) {
     `👤 מועמדים: ${candidates.map((c) => c.full_name || "מועמד").join(", ")}`
   );
 
-  scheduleEmployerListFollowUp(employerId);
-}
-
-// ── מעקב קורות חיים ──────────────────────────────────────────────────────────
-
-function scheduleCVFollowUp(candidateId, employerId, candidateName) {
-  const delay = 7 * 24 * 60 * 60 * 1000;
-  setTimeout(async () => {
-    const res = await query(
-      `SELECT status FROM cv_requests WHERE employer_id=$1 AND candidate_id=$2`,
-      [employerId, candidateId]
-    );
-    const req = res.rows[0];
-    if (!req || req.status === "connected" || req.status === "rejected") return;
-
-    await bot.sendMessage(
-      employerId,
-      `מה קרה עם ${candidateName}?`,
-      {
-        reply_markup: {
-          inline_keyboard: [[
-            { text: "✅ יצרתי קשר",  callback_data: `CVFOLLOWUP_CONTACTED_${candidateId}_${employerId}` },
-            { text: "⏳ עוד בתהליך", callback_data: `CVFOLLOWUP_INPROGRESS_${candidateId}_${employerId}` },
-            { text: "❌ לא מתאים",   callback_data: `CVFOLLOWUP_NOTSUITABLE_${candidateId}_${employerId}` },
-          ]],
-        },
-      }
-    );
-  }, delay);
-}
-
-// ── ביקורת אחרי חיבור מוצלח ─────────────────────────────────────────────────
-
-function scheduleRatingRequest(employerId, candidateId, candidateName) {
-  setTimeout(async () => {
-    try {
-      await bot.sendMessage(
-        employerId,
-        `איך יצא החיבור עם ${candidateName}? ⭐`,
-        {
-          reply_markup: {
-            inline_keyboard: [[
-              { text: "⭐⭐⭐⭐⭐", callback_data: `RATING_5_${employerId}_${candidateId}` },
-              { text: "⭐⭐⭐",    callback_data: `RATING_3_${employerId}_${candidateId}` },
-              { text: "⭐",       callback_data: `RATING_1_${employerId}_${candidateId}` },
-            ]],
-          },
-        }
-      );
-    } catch (_) {}
-  }, 3 * 24 * 60 * 60 * 1000);
-}
-
-// ── פידבק ומעקב אוטומטי ──────────────────────────────────────────────────────
-
-// פידבק ליועץ אחרי 14 ימים ללא פנייה מלשכה
-function scheduleCandidateNudge(candidateId) {
-  setTimeout(async () => {
-    const cand = await getCandidateRecord(candidateId);
-    if (!cand || cand.status !== "active") return;
-    const res = await query(
-      `SELECT 1 FROM cv_requests WHERE candidate_id=$1 LIMIT 1`,
-      [candidateId]
-    );
-    if (res.rows.length > 0) return;
-    try {
-      await bot.sendMessage(
-        candidateId,
-        "הפרופיל שלך פעיל אצלנו, עדיין מחפשים עבורך. ברגע שיהיה התאמה — תשמע ממני."
-      );
-    } catch (_) {}
-  }, 14 * 24 * 60 * 60 * 1000);
-}
-
-// מעקב אחרי מגייס שלא פתח אף קורות חיים אחרי 7 ימים
-function scheduleEmployerListFollowUp(employerId) {
-  setTimeout(async () => {
-    const emp = await getEmployerRecord(employerId);
-    if (!emp || emp.status !== "active") return;
-    const res = await query(
-      `SELECT 1 FROM cv_requests WHERE employer_id=$1 LIMIT 1`,
-      [employerId]
-    );
-    if (res.rows.length > 0) return;
-    try {
-      await bot.sendMessage(
-        employerId,
-        "עדיין מחפשים? הרשימה עדיין פעילה.",
-        {
-          reply_markup: {
-            inline_keyboard: [[
-              { text: "כן, עוד מחפשים", callback_data: `EMPLIST_STILL_${employerId}` },
-              { text: "לא, מצאנו",       callback_data: `EMPLIST_FOUND_${employerId}` },
-            ]],
-          },
-        }
-      );
-    } catch (_) {}
-  }, 7 * 24 * 60 * 60 * 1000);
-}
-
-// מעקב חודשי ליועץ — 30 ימים מרישום
-function scheduleMonthlyCheckin(candidateId) {
-  setTimeout(async () => {
-    const cand = await getCandidateRecord(candidateId);
-    if (!cand || cand.status !== "active") return;
-    try {
-      await bot.sendMessage(
-        candidateId,
-        "חודש עבר מאז שנרשמת. מה הסטטוס?",
-        {
-          reply_markup: {
-            inline_keyboard: [[
-              { text: "עדיין מחפש",   callback_data: `CHECKIN_STILL_${candidateId}` },
-              { text: "מצאתי עבודה", callback_data: `CHECKIN_FOUND_${candidateId}` },
-            ]],
-          },
-        }
-      );
-    } catch (_) {}
-  }, 30 * 24 * 60 * 60 * 1000);
-}
-
-function scheduleBimonthlyReminder(candidateId) {
-  setTimeout(async () => {
-    const cand = await getCandidateRecord(candidateId);
-    if (!cand || cand.status !== "active") return;
-    try {
-      await bot.sendMessage(
-        candidateId,
-        "היי, עדיין מחפש הזדמנות? 👋\nהפרופיל שלך פעיל — רק רוצים לוודא שהמידע עדכני.",
-        {
-          reply_markup: {
-            inline_keyboard: [
-              [{ text: "כן, עדיין מחפש",  callback_data: `CHECKIN_STILL_${candidateId}` }],
-              [{ text: "עדכן פרטים",       callback_data: "EXISTING_UPDATE" }],
-              [{ text: "מצאתי עבודה 🎉",  callback_data: `CHECKIN_FOUND_${candidateId}` }],
-            ],
-          },
-        }
-      );
-    } catch (_) {}
-  }, 60 * 24 * 60 * 60 * 1000);
+  await scheduleEmployerListFollowUp(employerId);
 }
 
 function politicalMatches(candidateSide, employerSide) {
@@ -930,9 +959,9 @@ async function finishSession(chatId, session) {
     for (const employer of futureEmployers) {
       await sendMatchSummary([newCandidate], employer, false);
     }
-    scheduleCandidateNudge(chatId);
-    scheduleMonthlyCheckin(chatId);
-    scheduleBimonthlyReminder(chatId);
+    await scheduleCandidateNudge(chatId);
+    await scheduleMonthlyCheckin(chatId);
+    await scheduleBimonthlyReminder(chatId);
 
     // הודעת קבלת פנים
     await bot.sendMessage(
@@ -1623,7 +1652,7 @@ bot.on("callback_query", async (cbQuery) => {
        ON CONFLICT (employer_id, candidate_id) DO UPDATE SET requested_at=NOW(), status='matched', updated_at=NOW()`,
       [employerId, candidateId]
     );
-    scheduleCVFollowUp(candidateId, employerId, candidate.full_name || "מועמד");
+    await scheduleCVFollowUp(candidateId, employerId, candidate.full_name || "מועמד");
     return;
   }
 
@@ -1645,7 +1674,7 @@ bot.on("callback_query", async (cbQuery) => {
       );
       await bot.sendMessage(chatId, "תודה! אחזור אליך בעוד שבוע 🤝");
       await bot.sendMessage(ADMIN_ID, `עדכון על ${candidateName} ↔ ${employerName}: עוד בתהליך ⏳`);
-      scheduleCVFollowUp(candidateId, employerId, candidateName);
+      await scheduleCVFollowUp(candidateId, employerId, candidateName);
     } else {
       const status = action === "CONTACTED" ? "connected" : "rejected";
       const label  = action === "CONTACTED" ? "חיבור מוצלח ✅" : "לא מתאים ❌";
@@ -1656,7 +1685,7 @@ bot.on("callback_query", async (cbQuery) => {
       await bot.sendMessage(chatId, "תודה על העדכון 🙏");
       await bot.sendMessage(ADMIN_ID, `עדכון על ${candidateName} ↔ ${employerName}: ${label}`);
       if (action === "CONTACTED") {
-        scheduleRatingRequest(employerId, candidateId, candidateName);
+        await scheduleRatingRequest(employerId, candidateId, candidateName);
       }
     }
     return;
@@ -1709,7 +1738,7 @@ bot.on("callback_query", async (cbQuery) => {
   if (data.startsWith("CHECKIN_STILL_")) {
     const candidateId = Number(data.replace("CHECKIN_STILL_", ""));
     await bot.sendMessage(chatId, "ממשיכים לחפש עבורך 🤝");
-    scheduleMonthlyCheckin(candidateId);
+    await scheduleMonthlyCheckin(candidateId);
     return;
   }
   if (data.startsWith("CHECKIN_FOUND_")) {
@@ -1910,7 +1939,7 @@ bot.on("callback_query", async (cbQuery) => {
     const employerId  = Number(parts[3]);
     await bot.sendMessage(ADMIN_ID, "✅ נרשם. ההתאמה עדיין פעילה. נבדוק שוב בשבוע הבא.");
     // שלח follow-up נוסף בעוד שבוע
-    scheduleFollowUp(candidateId, employerId);
+    await scheduleFollowUp(candidateId, employerId);
     return;
   }
 
@@ -2273,6 +2302,8 @@ async function deactivateInactiveEmployers() {
   scheduleDailyBackup();
   await checkAnthropicKey();
   scheduleApiHealthCheck();
+  await checkScheduledTasks();
+  setInterval(checkScheduledTasks, 60 * 1000);
   console.log("🟢 קוזו bot פועל בטלגרם...");
 })();
 
