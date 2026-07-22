@@ -1454,6 +1454,18 @@ bot.on("message", async (msg) => {
 
   const session = sessions[chatId];
 
+  // ── קוד אישור לשכה/עירייה — נבדק לפני כל handler אחר ──
+  if (session && session.stage === "awaiting_employer_code") {
+    if (text.toLowerCase() === EMPLOYER_ACCESS_CODE.toLowerCase()) {
+      sessions[chatId] = { ...newSession("employer", session.username), data: {} };
+      await bot.sendMessage(chatId, "קוד אומת ✅\n\nהיי, אני קוזו 🤝\nבואו נכניס אתכם למאגר ונתחיל לחבר:");
+      await sendStep(chatId, sessions[chatId]);
+    } else {
+      await bot.sendMessage(chatId, "הקוד לא מוכר לי 🙏 לקבלת קוד תקין, פנו אלינו ישירות.\nלפניה ישירה: wa.me/972548028082");
+    }
+    return;
+  }
+
   // ── מצב השהייה ──
   if (!session || session.stage === "free_chat") {
     // בדיקת מילות מפתח לפני Claude
@@ -1604,18 +1616,6 @@ bot.on("message", async (msg) => {
     return;
   }
 
-  // ── קוד אישור לשכה/עירייה ──
-  if (session && session.stage === "awaiting_employer_code") {
-    if (text.trim() === EMPLOYER_ACCESS_CODE) {
-      sessions[chatId] = { ...newSession("employer", session.username), data: {} };
-      await bot.sendMessage(chatId, "קוד אומת ✅\n\nהיי, אני קוזו 🤝\nבואו נכניס אתכם למאגר ונתחיל לחבר:");
-      await sendStep(chatId, sessions[chatId]);
-    } else {
-      await bot.sendMessage(chatId, "הקוד לא מוכר לי 🙏 לקבלת קוד תקין, פנו אלינו ישירות.\nלפניה ישירה: wa.me/972548028082");
-    }
-    return;
-  }
-
   // ── אימות נייד (יועצים בלבד) ──
   if (session && session.stage === "awaiting_phone") {
     if (!isValidPhone(text)) {
@@ -1635,6 +1635,7 @@ bot.on("message", async (msg) => {
     return;
   }
   if (!session.verified && session.stage !== "updating") return;
+  if (!["candidate", "employer", "update", "employer_update"].includes(session.type)) return;
 
   const steps = getSteps(session.type);
   const step = steps[session.step];
