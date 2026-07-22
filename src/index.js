@@ -1757,8 +1757,8 @@ bot.on("callback_query", async (cbQuery) => {
       await bot.sendMessage(chatId, "לא מצאתי קורות חיים 🙏");
       return;
     }
-    const internshipLine = candidate.is_intern === "כן ✅" && candidate.internship_mentor
-      ? `\n🏛 התמחות: דוברות הכנסת — שנה | אצל: ${candidate.internship_mentor}`
+    const internshipLine = candidate.is_intern === "כן ✅"
+      ? `\n🏛 התמחות: דוברות הכנסת — שנה`
       : "";
     const referencesLine = candidate.has_references === "כן ✅" && candidate.references
       ? `\n⭐ ממליצים: ${candidate.references}`
