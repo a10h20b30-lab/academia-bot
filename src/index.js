@@ -537,7 +537,6 @@ async function sendMatchSummary(candidates, employer, notifyCandidates = true) {
       callback_data: `CV_${c.telegram_id}_${employerId}`,
     }];
   });
-  keyboard.push([{ text: "🔄 הצג עוד מועמדים", callback_data: `REFRESH_MATCHES_${employerId}` }]);
   keyboard.push([{ text: "הפסק לקבל הצעות 🔕", callback_data: `STOP_OFFERS_EMPLOYER_${employerId}` }]);
 
   const employerHeader = candidates.length === 1
