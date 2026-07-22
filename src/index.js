@@ -945,10 +945,8 @@ async function finishSession(chatId, session) {
     await updateCandidateRecord(chatId, session.data);
     await resumeCandidate(chatId);
     await exportExcel();
-    await bot.sendMessage(ADMIN_ID, `🔄 מועמד חזר לפעילות (ID: ${chatId})\n${JSON.stringify(session.data, null, 2)}`);
-
-    // חיפוש מחדש — מגייסים שמתאימים לפרופיל המעודכן
     const updatedCandidate = await getCandidateRecord(chatId);
+    await bot.sendMessage(ADMIN_ID, `▶️ חזר/ה לפעילות\n👤 שם: ${updatedCandidate?.full_name || "—"}\n🆔 ID: ${chatId}\n📋 סוג: יועץ`);
     const matchingEmployers = updatedCandidate ? await findMatchingEmployers(updatedCandidate) : [];
     for (const employer of matchingEmployers) {
       await sendMatchSummary([updatedCandidate], employer, false);
@@ -966,8 +964,8 @@ async function finishSession(chatId, session) {
     await updateEmployerRecord(chatId, session.data);
     await resumeEmployer(chatId);
     await exportExcel();
-    await bot.sendMessage(ADMIN_ID, `🔄 מגייס חזר לפעילות (ID: ${chatId})\n${JSON.stringify(session.data, null, 2)}`);
     const updatedEmployer = await getEmployerRecord(chatId);
+    await bot.sendMessage(ADMIN_ID, `▶️ חזר/ה לפעילות\n👤 שם: ${updatedEmployer?.contact_name || "—"}\n🆔 ID: ${chatId}\n📋 סוג: מגייס`);
     const matches = updatedEmployer ? await findMatches(updatedEmployer) : [];
     if (matches.length > 0) {
       await sendMatchSummary(matches, updatedEmployer, true);
@@ -1169,7 +1167,8 @@ bot.onText(/\/pause/, async (msg) => {
   await pauseCandidate(chatId);
   await exportExcel();
   await bot.sendMessage(chatId, "הבנתי.\nעצרתי. כשתרצו לחזור — כתבו /resume", { parse_mode: "Markdown" });
-  await bot.sendMessage(ADMIN_ID, `⏸ מועמד השהה את עצמו (ID: ${chatId})`);
+  const pausedCand = await getCandidateRecord(chatId);
+  await bot.sendMessage(ADMIN_ID, `⏸ השהה/תה את עצמו/ה\n👤 שם: ${pausedCand?.full_name || "—"}\n🆔 ID: ${chatId}\n📋 סוג: יועץ`);
 });
 
 bot.onText(/\/resume/, async (msg) => {
@@ -1469,7 +1468,8 @@ bot.on("message", async (msg) => {
         "הבנתי.\nעצרתי. כשתרצו לחזור — כתבו *החזר אותי לפעילות*",
         { parse_mode: "Markdown" }
       );
-      await bot.sendMessage(ADMIN_ID, `⏸ מועמד השהה את עצמו (ID: ${chatId})`);
+      const pausedC = await getCandidateRecord(chatId);
+      await bot.sendMessage(ADMIN_ID, `⏸ השהה/תה את עצמו/ה\n👤 שם: ${pausedC?.full_name || "—"}\n🆔 ID: ${chatId}\n📋 סוג: יועץ`);
       sessions[chatId] = { stage: "free_chat" };
       return;
     }
@@ -1837,14 +1837,18 @@ bot.on("callback_query", async (cbQuery) => {
     await pauseCandidate(chatId);
     await pauseEmployer(chatId);
     await bot.sendMessage(chatId, "הבנתי. עצרתי. כשתרצו לחזור — כתבו *החזר אותי לפעילות*", { parse_mode: "Markdown" });
-    await bot.sendMessage(ADMIN_ID, `⏸ משתמש השהה את עצמו (ID: ${chatId})`);
+    const pausedRec = await getCandidateRecord(chatId) || await getEmployerRecord(chatId);
+    const pausedName = pausedRec?.full_name || pausedRec?.contact_name || "—";
+    const pausedType = pausedRec?.full_name ? "יועץ" : "מגייס";
+    await bot.sendMessage(ADMIN_ID, `⏸ השהה/תה את עצמו/ה\n👤 שם: ${pausedName}\n🆔 ID: ${chatId}\n📋 סוג: ${pausedType}`);
     return;
   }
   if (data === "EXISTING_FOUND_JOB") {
+    const foundRec = await getCandidateRecord(chatId);
     await archiveCandidate(chatId);
     await exportExcel();
     await bot.sendMessage(chatId, "כיף לשמוע! 🎉 אם יום אחד תרצו לחזור — /start תמיד פתוח");
-    await bot.sendMessage(ADMIN_ID, `📦 מועמד הועבר לארכיון (ID: ${chatId}), מצא עבודה`);
+    await bot.sendMessage(ADMIN_ID, `📦 הועבר/ה לארכיון — מצא/ה עבודה\n👤 שם: ${foundRec?.full_name || "—"}\n🆔 ID: ${chatId}\n📋 סוג: יועץ`);
     return;
   }
 
@@ -1855,10 +1859,11 @@ bot.on("callback_query", async (cbQuery) => {
   }
   if (data.startsWith("EMPLIST_FOUND_")) {
     const employerId = Number(data.replace("EMPLIST_FOUND_", ""));
+    const empFound = await getEmployerRecord(employerId);
     await pauseEmployer(employerId);
     await exportExcel();
     await bot.sendMessage(chatId, "מעולה! 🎉 נסמן אתכם כלא פעיל. בהצלחה!");
-    await bot.sendMessage(ADMIN_ID, `✅ לשכה מצאה מועמד, הועברה לסטטוס לא פעיל (ID: ${employerId})`);
+    await bot.sendMessage(ADMIN_ID, `✅ מצאה מועמד — הועברה לסטטוס לא פעיל\n👤 שם: ${empFound?.contact_name || "—"}\n🆔 ID: ${employerId}\n📋 סוג: מגייס`);
     return;
   }
 
@@ -1871,10 +1876,11 @@ bot.on("callback_query", async (cbQuery) => {
   }
   if (data.startsWith("CHECKIN_FOUND_")) {
     const candidateId = Number(data.replace("CHECKIN_FOUND_", ""));
+    const checkinCand = await getCandidateRecord(candidateId);
     await archiveCandidate(candidateId);
     await exportExcel();
     await bot.sendMessage(chatId, "מעולה! 🎉 כיף לשמוע. אם יום אחד תרצו לחזור — /start תמיד פתוח");
-    await bot.sendMessage(ADMIN_ID, `📦 מועמד הועבר לארכיון (ID: ${candidateId}), מצא עבודה (check-in חודשי)`);
+    await bot.sendMessage(ADMIN_ID, `📦 הועבר/ה לארכיון — מצא/ה עבודה (check-in)\n👤 שם: ${checkinCand?.full_name || "—"}\n🆔 ID: ${candidateId}\n📋 סוג: יועץ`);
     return;
   }
 
@@ -1890,10 +1896,10 @@ bot.on("callback_query", async (cbQuery) => {
     await exportExcel();
     if (source === "kozo") {
       await bot.sendMessage(chatId, "מעולה! 🎉 שמחים שקוזו עזר — בהצלחה בתפקיד!");
-      await bot.sendMessage(ADMIN_ID, `🏆 חיבור מוצלח דרך קוזו!\n\n${name} מצא עבודה דרך קוזו ✅`);
+      await bot.sendMessage(ADMIN_ID, `🏆 חיבור מוצלח דרך קוזו\n👤 שם: ${name}\n🆔 ID: ${candidateId}\n📋 סוג: יועץ`);
     } else {
       await bot.sendMessage(chatId, "תודה על העדכון 🙏 בהצלחה בתפקיד החדש!");
-      await bot.sendMessage(ADMIN_ID, `📦 יועץ מצא עבודה ממקום אחר: ${name}`);
+      await bot.sendMessage(ADMIN_ID, `📦 מצא/ה עבודה ממקור אחר\n👤 שם: ${name}\n🆔 ID: ${candidateId}\n📋 סוג: יועץ`);
     }
     delete sessions[chatId];
     return;
@@ -2030,19 +2036,21 @@ bot.on("callback_query", async (cbQuery) => {
   // הפסקת הצעות — לשכה/עירייה
   if (data.startsWith("STOP_OFFERS_EMPLOYER_")) {
     const employerId = Number(data.replace("STOP_OFFERS_EMPLOYER_", ""));
+    const stopEmp = await getEmployerRecord(employerId);
     await pauseEmployer(employerId);
     await bot.sendMessage(chatId, "הבנתי 🙏 הורדתי אתכם מהרשימה.\nכשתהיו מוכנים לחזור, כתבו *החזר אותי לפעילות*", { parse_mode: "Markdown" });
-    await bot.sendMessage(ADMIN_ID, `⏸ לשכה/עירייה הפסיקה לקבל הצעות (ID: ${employerId})`);
+    await bot.sendMessage(ADMIN_ID, `⏸ הפסיק/ה לקבל הצעות\n👤 שם: ${stopEmp?.contact_name || "—"}\n🆔 ID: ${employerId}\n📋 סוג: מגייס`);
     return;
   }
 
   // הפסקת הצעות — מועמד
   if (data.startsWith("STOP_OFFERS_CANDIDATE_")) {
     const candidateId = Number(data.replace("STOP_OFFERS_CANDIDATE_", ""));
+    const stopCand = await getCandidateRecord(candidateId);
     await pauseCandidate(candidateId);
     await exportExcel();
     await bot.sendMessage(chatId, "הבנתי 🙏 הורדתי אותך מהרשימה.\nכשתהיו מוכנים לחזור, כתבו *החזר אותי לפעילות*", { parse_mode: "Markdown" });
-    await bot.sendMessage(ADMIN_ID, `⏸ מועמד הפסיק לקבל הצעות (ID: ${candidateId})`);
+    await bot.sendMessage(ADMIN_ID, `⏸ הפסיק/ה לקבל הצעות\n👤 שם: ${stopCand?.full_name || "—"}\n🆔 ID: ${candidateId}\n📋 סוג: יועץ`);
     return;
   }
 
@@ -2065,8 +2073,8 @@ bot.on("callback_query", async (cbQuery) => {
     const parts = data.split("_");
     const candidateId = Number(parts[2]);
     const employerId  = Number(parts[3]);
-    await bot.sendMessage(ADMIN_ID, "✅ נרשם. ההתאמה עדיין פעילה. נבדוק שוב בשבוע הבא.");
-    // שלח follow-up נוסף בעוד שבוע
+    const [fuCand, fuEmp] = await Promise.all([getCandidateRecord(candidateId), getEmployerRecord(employerId)]);
+    await bot.sendMessage(ADMIN_ID, `✅ ההתאמה עדיין פעילה — נבדוק שוב בשבוע הבא\n👤 יועץ: ${fuCand?.full_name || "—"} (${candidateId})\n🏛 מגייס: ${fuEmp?.contact_name || "—"} (${employerId})`);
     await scheduleFollowUp(candidateId, employerId);
     return;
   }
@@ -2075,13 +2083,13 @@ bot.on("callback_query", async (cbQuery) => {
     const parts = data.split("_");
     const candidateId = Number(parts[2]);
     const employerId  = Number(parts[3]);
-    // עדכן סטטוס בהיסטוריה
+    const [fuCand2, fuEmp2] = await Promise.all([getCandidateRecord(candidateId), getEmployerRecord(employerId)]);
     await query(
       `UPDATE matches SET status='closed', closed_at=NOW() WHERE candidate_id=$1 AND employer_id=$2`,
       [candidateId, employerId]
     );
     await exportExcel();
-    await bot.sendMessage(ADMIN_ID, "❌ נרשם. ההתאמה נסגרה. המועמד לא יוצע לאותה לשכה שוב.");
+    await bot.sendMessage(ADMIN_ID, `❌ ההתאמה נסגרה\n👤 יועץ: ${fuCand2?.full_name || "—"} (${candidateId})\n🏛 מגייס: ${fuEmp2?.contact_name || "—"} (${employerId})`);
     return;
   }
 
