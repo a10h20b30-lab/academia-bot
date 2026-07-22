@@ -2305,25 +2305,6 @@ async function sendWeeklySummary() {
   );
 }
 
-async function sendWeeklyDigest() {
-  const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-  const [newCandsRes, newEmpsRes, matchesRes, connectedRes, activeCandsRes] = await Promise.all([
-    query(`SELECT COUNT(*) FROM candidates WHERE created_at >= $1`, [oneWeekAgo]),
-    query(`SELECT COUNT(*) FROM employers WHERE created_at >= $1`, [oneWeekAgo]),
-    query(`SELECT COUNT(*) FROM matches WHERE matched_at >= $1`, [oneWeekAgo]),
-    query(`SELECT COUNT(*) FROM cv_requests WHERE status='connected' AND updated_at >= $1`, [oneWeekAgo]),
-    query(`SELECT telegram_id FROM candidates WHERE status='active'`),
-  ]);
-  const msg =
-    `🔥 השבוע בקוזו\n\n` +
-    `- נוספו ${newCandsRes.rows[0].count} יועצים חדשים\n` +
-    `- נוספו ${newEmpsRes.rows[0].count} מגייסים חדשים\n` +
-    `- בוצעו ${matchesRes.rows[0].count} התאמות\n` +
-    `- ${connectedRes.rows[0].count} חיבורים מוצלחים`;
-  for (const row of activeCandsRes.rows) {
-    try { await bot.sendMessage(row.telegram_id, msg); } catch (_) {}
-  }
-}
 
 function scheduleWeeklySummary() {
   const now = new Date();
@@ -2334,7 +2315,6 @@ function scheduleWeeklySummary() {
   next.setHours(9, 0, 0, 0);
   setTimeout(async () => {
     try { await sendWeeklySummary(); } catch (e) { console.error("weekly summary error:", e.message); }
-    try { await sendWeeklyDigest(); } catch (e) { console.error("weekly digest error:", e.message); }
     scheduleWeeklySummary();
   }, next - now);
 }
