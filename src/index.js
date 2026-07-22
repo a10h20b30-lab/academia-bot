@@ -1084,23 +1084,25 @@ bot.onText(/\/start/, async (msg) => {
   const chatId = msg.chat.id;
   chatHistories[chatId] = [];
 
-  // זיהוי רישום כפול
   const existingCandidate = await getCandidateRecord(chatId);
   const existingEmployer  = await getEmployerRecord(chatId);
   if (existingCandidate || existingEmployer) {
     const name = existingCandidate?.full_name || existingEmployer?.contact_name || "";
+    const keyboard = existingCandidate
+      ? [
+          [{ text: "הפרופיל שלי 📋",    callback_data: "EXISTING_PROFILE" }],
+          [{ text: "עדכן פרטים ✏️",     callback_data: "EXISTING_UPDATE" }],
+          [{ text: "השהה אותי ⏸",       callback_data: "EXISTING_PAUSE" }],
+          [{ text: "מצאתי עבודה 🎉",    callback_data: "EXISTING_FOUND_JOB" }],
+        ]
+      : [
+          [{ text: "עדכן פרטים ✏️",     callback_data: "EXISTING_UPDATE" }],
+          [{ text: "השהה אותי ⏸",       callback_data: "EXISTING_PAUSE" }],
+        ];
     await bot.sendMessage(
       chatId,
-      `${name ? `שלום ${name}!\n` : ""}כבר רשום אצלנו. מה תרצה לעשות?`,
-      {
-        reply_markup: {
-          inline_keyboard: [
-            [{ text: "עדכן פרטים",      callback_data: "EXISTING_UPDATE" }],
-            [{ text: "השהה אותי",       callback_data: "EXISTING_PAUSE" }],
-            [{ text: "מצאתי עבודה 🎉", callback_data: "EXISTING_FOUND_JOB" }],
-          ],
-        },
-      }
+      `שלום${name ? ` ${name}` : ""}, חזרת 👋 מה תרצה לעשות?`,
+      { reply_markup: { inline_keyboard: keyboard } }
     );
     return;
   }
@@ -1811,6 +1813,17 @@ bot.on("callback_query", async (cbQuery) => {
   }
 
   // רישום כפול — בחירת פעולה
+  if (data === "EXISTING_PROFILE") {
+    const cand = await getCandidateRecord(chatId);
+    if (cand) {
+      await bot.sendMessage(chatId, buildProfileMessage(cand), {
+        reply_markup: { inline_keyboard: [[{ text: "✏️ עדכן פרטים", callback_data: "EXISTING_UPDATE" }]] },
+      });
+    } else {
+      await bot.sendMessage(chatId, "לא מצאתי פרופיל. נסה /start מחדש.");
+    }
+    return;
+  }
   if (data === "EXISTING_UPDATE") {
     sessions[chatId] = { ...newSession("update", ""), stage: "updating" };
     await bot.sendMessage(chatId, "יאללה, נעדכן את הפרטים שלך");
