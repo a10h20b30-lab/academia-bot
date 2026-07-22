@@ -515,9 +515,15 @@ async function sendMatchSummary(candidates, employer, notifyCandidates = true) {
   for (const candidate of candidates) {
     await recordMatch(candidate.telegram_id, employerId, candidate.full_name || "מועמד", employer.contact_name || "לשכה");
     if (notifyCandidates) {
+      const orgType = employer.org_type || "";
+      const orgLabel =
+        orgType === "כנסת"                    ? "ללשכת כנסת" :
+        orgType === "עירייה"                  ? "לעירייה"    :
+        orgType === 'משרד יח"צ / סושיאל'     ? "למשרד"      :
+                                                "לגוף מתאים";
       await bot.sendMessage(
         candidate.telegram_id,
-        `העברתי את הפרטים שלך ללשכה/גוף חדש שנרשם ונראה לי מתאים. אם יתאים — ייצרו איתך קשר 🤝`,
+        `היי, העברתי את הפרטים שלך ${orgLabel}. במידה וזה יהיה רלוונטי — ייצרו איתך קשר 🤝`,
         { reply_markup: { inline_keyboard: [[{ text: "הפסק לקבל הצעות 🔕", callback_data: `STOP_OFFERS_CANDIDATE_${candidate.telegram_id}` }]] } }
       );
     }
