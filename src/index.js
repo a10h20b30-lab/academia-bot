@@ -1120,7 +1120,8 @@ bot.on("message", async (msg) => {
         "🏛 מגייסים — רשימת מגייסים פעילים\n" +
         "🎯 התאמות — מגייסים שקיבלו רשימת מועמדים\n" +
         "📞 יצירת קשר — מגייסים שלחצו קורות חיים\n" +
-        "🔗 חיבורים — מגייסים שאישרו יצירת קשר"
+        "🔗 חיבורים — מגייסים שאישרו יצירת קשר\n" +
+        "🗑 מחק [ID] — מחיקת משתמש מהמערכת"
       );
       return;
     }
@@ -1133,6 +1134,29 @@ bot.on("message", async (msg) => {
       } else {
         await bot.sendMessage(chatId, "פורמט: שנה קוד [קוד חדש]");
       }
+      return;
+    }
+    if (text === "מחק") {
+      await bot.sendMessage(chatId, "לציין את ה-ID של המשתמש: מחק [ID]\nאת ה-ID תמצא בפקודות יועצים/מגייסים");
+      return;
+    }
+    if (text.startsWith("מחק ")) {
+      const targetId = Number(text.replace("מחק ", "").trim());
+      if (!targetId) {
+        await bot.sendMessage(chatId, "ID לא תקין. פורמט: מחק [ID]");
+        return;
+      }
+      await Promise.all([
+        query(`DELETE FROM candidates   WHERE telegram_id=$1`, [targetId]),
+        query(`DELETE FROM employers    WHERE telegram_id=$1`, [targetId]),
+        query(`DELETE FROM cv_requests  WHERE employer_id=$1 OR candidate_id=$1`, [targetId]),
+        query(`DELETE FROM matches      WHERE candidate_id=$1 OR employer_id=$1`, [targetId]),
+        query(`DELETE FROM ratings      WHERE employer_id=$1 OR candidate_id=$1`, [targetId]),
+        query(`DELETE FROM recommendations WHERE candidate_id=$1`, [targetId]),
+        query(`DELETE FROM access_requests WHERE telegram_id=$1`, [targetId]),
+      ]);
+      await exportExcel();
+      await bot.sendMessage(chatId, `✅ המשתמש ${targetId} נמחק מהמערכת`);
       return;
     }
     if (text === "טבלה") { await sendExcel(); return; }
