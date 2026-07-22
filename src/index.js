@@ -1690,6 +1690,8 @@ bot.on("callback_query", async (cbQuery) => {
       : (candidate.certificate_field ? `תעודה: ${candidate.certificate_field}` : "אין תואר");
     const card =
       `👤 ${candidate.full_name || "מועמד"}\n` +
+      `📱 ${candidate.phone || ""}\n` +
+      `📧 ${candidate.email || ""}\n` +
       `📍 ${candidate.city || ""}\n` +
       `🎓 ${degreeText}\n` +
       `💼 ${candidate.experience || ""}\n` +
