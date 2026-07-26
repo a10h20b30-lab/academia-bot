@@ -720,13 +720,26 @@ async function exportExcel() {
       return ws;
     };
 
-    // גיליון ארכיון — מועמדים עם status='archived'
-    const archived = candidates.filter((c) => c.status === "archived");
-    const activeCandidates = candidates.filter((c) => c.status !== "archived");
+    const archived         = candidates.filter((c) => c.status === "archived");
+    const activeCandidates = candidates.filter((c) => c.status === "active");
+    const pausedCandidates = candidates.filter((c) => c.status === "paused");
+    const activeEmployers  = employers.filter((e) => e.status === "active");
+    const pausedEmployers  = employers.filter((e) => e.status === "paused");
 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, makeSheet("רשימת יועצים ודוברים — קוזו", CANDIDATE_HEADERS, activeCandidates.map(fmtC)), "יועצים ודוברים");
-    XLSX.utils.book_append_sheet(wb, makeSheet("רשימת לשכות חברי כנסת — קוזו", EMPLOYER_HEADERS, employers.map(fmtE)), "חברי כנסת");
+    XLSX.utils.book_append_sheet(wb, makeSheet("רשימת לשכות חברי כנסת — קוזו", EMPLOYER_HEADERS, activeEmployers.map(fmtE)), "חברי כנסת");
+
+    // גיליון מושהים
+    const PAUSED_C_HEADERS = [...CANDIDATE_HEADERS];
+    const PAUSED_E_HEADERS = [...EMPLOYER_HEADERS];
+    const pausedRows = [
+      ...pausedCandidates.map((c) => ({ ...fmtC(c), _type: "יועץ" })),
+      ...pausedEmployers.map((e) => ({ ...fmtE(e), _type: "מגייס" })),
+    ];
+    XLSX.utils.book_append_sheet(wb, makeSheet("מושהים — קוזו", ["סוג", ...PAUSED_C_HEADERS],
+      pausedRows.map(({ _type, ...rest }) => ({ "סוג": _type, ...rest }))
+    ), "מושהים");
 
     // גיליון ארכיון
     XLSX.utils.book_append_sheet(wb, makeSheet("ארכיון — מצאו עבודה", CANDIDATE_HEADERS, archived.map(fmtC)), "ארכיון");
@@ -1499,15 +1512,19 @@ bot.on("message", async (msg) => {
     }
 
     if (lower.includes("השהה אותי")) {
-      await pauseCandidate(chatId);
-      await exportExcel();
-      await bot.sendMessage(
-        chatId,
-        "הבנתי.\nעצרתי. כשתרצו לחזור — כתבו *החזר אותי לפעילות*",
-        { parse_mode: "Markdown" }
-      );
-      const pausedC = await getCandidateRecord(chatId);
-      await bot.sendMessage(ADMIN_ID, `⏸ השהה/תה את עצמו/ה\n👤 שם: ${pausedC?.full_name || "—"}\n🆔 ID: ${chatId}\n📋 סוג: יועץ`);
+      const empPauseText = await getEmployerRecord(chatId);
+      if (empPauseText) {
+        await pauseEmployer(chatId);
+        await exportExcel();
+        await bot.sendMessage(chatId, "הבנתי.\nעצרתי. כשתרצו לחזור — כתבו *החזר אותי לפעילות*", { parse_mode: "Markdown" });
+        await bot.sendMessage(ADMIN_ID, `⏸ השהה/תה את עצמו/ה\n👤 שם: ${empPauseText.contact_name || "—"}\n🆔 ID: ${chatId}\n📋 סוג: מגייס`);
+      } else {
+        await pauseCandidate(chatId);
+        await exportExcel();
+        await bot.sendMessage(chatId, "הבנתי.\nעצרתי. כשתרצו לחזור — כתבו *החזר אותי לפעילות*", { parse_mode: "Markdown" });
+        const pausedC = await getCandidateRecord(chatId);
+        await bot.sendMessage(ADMIN_ID, `⏸ השהה/תה את עצמו/ה\n👤 שם: ${pausedC?.full_name || "—"}\n🆔 ID: ${chatId}\n📋 סוג: יועץ`);
+      }
       sessions[chatId] = { stage: "free_chat" };
       return;
     }
