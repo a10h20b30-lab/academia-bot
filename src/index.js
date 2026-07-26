@@ -173,7 +173,7 @@ async function updateCandidateRecord(telegramId, updates) {
   const ALLOWED_COLUMNS = [
     "full_name", "phone", "email", "city", "degree", "field_of_study",
     "has_certificate", "certificate_field",
-    "languages", "is_intern", "internship_mentor",
+    "languages", "is_intern", "internship_mentor", "internship_phone",
     "experience", "interests", "workplace_pref", "timing", "availability",
     "cv", "motivation", "has_references", "references", "declaration", "status",
     "availability_status"
@@ -240,7 +240,7 @@ async function saveRecord(type, chatId, username, data) {
         telegram_id, telegram_username,
         full_name, phone, email, city, degree, field_of_study,
         has_certificate, certificate_field,
-        languages, is_intern, internship_mentor,
+        languages, is_intern, internship_mentor, internship_phone,
         experience, interests, workplace_pref, timing, availability,
         cv, motivation, has_references, "references",
         political_side, has_license, declaration,
@@ -249,18 +249,20 @@ async function saveRecord(type, chatId, username, data) {
         $1, $2,
         $3, $4, $5, $6, $7, $8,
         $9, $10,
-        $11, $12, $13,
-        $14, $15, $16, $17, $18,
-        $19, $20, $21, $22,
-        $23, $24, $25,
-        $26
+        $11, $12, $13, $14,
+        $15, $16, $17, $18, $19,
+        $20, $21, $22, $23,
+        $24, $25, $26,
+        $27
       )`,
       [
         chatId, username || "",
         data.full_name || "", data.phone || "", data.email || "",
-        data.city || "", data.degree || "", data.field_of_study || "",
+        data.city || "", data.degree || "",
+        data.degree === "אין תואר" ? null : (data.field_of_study || null),
         data.has_certificate || "", data.certificate_field || "",
-        data.languages || "", data.is_intern || "", data.internship_mentor || "",
+        data.languages || "", data.is_intern || "",
+        data.internship_mentor || "", data.internship_phone || null,
         data.experience || "", data.interests || "",
         data.workplace_pref || "", data.timing || "", data.availability || "",
         data.cv || "", data.motivation || "", data.has_references || "",
@@ -847,7 +849,8 @@ const CANDIDATE_STEPS = [
   { key: "certificate_field",   question: "באיזה תחום התעודה?",                                                                 type: "text",   conditional: "has_certificate=כן ✅" },
   { key: "languages",           question: "באילו שפות את/ה שולט/ת?\nאפשר לסמן כמה ולחץ סיום ✓",                              type: "multi",  options: [["עברית", "אנגלית"], ["ערבית", "רוסית"], ["אחר", "סיום ✓"]] },
   { key: "is_intern",           question: "האם עברת התמחות בכנסת?",                                                            type: "single", options: [["כן ✅", "לא ❌"]] },
-  { key: "internship_mentor",   question: "שם ונייד הדובר/ת שאצלו/ה התמחית",                                                   type: "text",   conditional: "is_intern=כן ✅" },
+  { key: "internship_mentor",   question: "שם הדובר/ת שאצלו/ה התמחית?",                                                      type: "text",   conditional: "is_intern=כן ✅" },
+  { key: "internship_phone",    question: "נייד הדובר/ת?",                                                                      type: "text",   conditional: "is_intern=כן ✅" },
   { key: "experience",          question: "תאר/י את הניסיון המקצועי שלך",                                                      type: "text"   },
   { key: "interests",           question: "באיזה תחום את/ה מחפש/ת עבודה?\nאפשר לסמן כמה ולחץ סיום ✓",                        type: "multi",  options: [["ייעוץ פרלמנטרי", "דוברות"], ["סושיאל ורשתות חברתיות", "יועץ פוליטי"], ["עריכת וידאו", "עיצוב גרפי"], ["ניהול לשכה", "סיום ✓"]] },
   { key: "workplace_pref",      question: "היכן תרצה/י לעבוד?",                                                                type: "single", options: [["כנסת", "עירייה"], ["שניהם"]] },
@@ -1787,8 +1790,8 @@ bot.on("callback_query", async (cbQuery) => {
       await bot.sendMessage(chatId, `ליצירת קשר ישירה עם ${candidate.full_name || "המועמד"} — פנו לקוזו: wa.me/972548028082`);
     }
     await query(
-      `INSERT INTO cv_requests (employer_id, candidate_id)
-       VALUES ($1, $2)
+      `INSERT INTO cv_requests (employer_id, candidate_id, status)
+       VALUES ($1, $2, 'matched')
        ON CONFLICT (employer_id, candidate_id) DO UPDATE SET requested_at=NOW(), status='matched', updated_at=NOW()`,
       [employerId, candidateId]
     );
