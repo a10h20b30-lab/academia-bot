@@ -16,6 +16,10 @@ const ADMIN_ID = 6021652936;
 const ADMIN_PHONE_LINK = "https://wa.me/972548028082?text=%D7%94%D7%99%D7%99%20%D7%90%D7%A0%D7%99%20%D7%9E%D7%A2%D7%95%D7%A0%D7%99%D7%99%D7%9F%20%D7%9C%D7%A7%D7%91%D7%9C%20%D7%A7%D7%95%D7%93%20%D7%9Ckozo"; // לינק לוואטסאפ עם הודעה מוכנה
 let EMPLOYER_ACCESS_CODE = "KOZO8"; // קוד האישור הקבוע ללשכות/עיריות
 
+const IL_TZ = { timeZone: "Asia/Jerusalem" };
+const toIL     = (d) => d ? new Date(d).toLocaleString("he-IL", IL_TZ)     : "—";
+const toILDate = (d) => d ? new Date(d).toLocaleDateString("he-IL", IL_TZ) : "—";
+
 // ── בדיקת API key ────────────────────────────────────────────────────────────
 
 async function checkAnthropicKey() {
@@ -675,7 +679,7 @@ async function exportExcel() {
     const EMPLOYER_HEADERS  = ["תאריך","טלגרם","מטעם","שם ותפקיד","נייד","מייל","תחומים","היקף","תזמון","חשיבות ניסיון","הערות","הצהרה","סטטוס"];
 
     const fmtC = (r) => ({
-      "תאריך": r.timestamp ? new Date(r.timestamp).toLocaleString("he-IL") : "",
+      "תאריך": r.timestamp ? toIL(r.timestamp) : "",
       "טלגרם": r.telegram_username ? `@${r.telegram_username}` : String(r.telegram_id || ""),
       "שם מלא": r.full_name || "", "נייד": r.phone || "", "מייל": r.email || "",
       "עיר": r.city || "", "תואר": r.degree || "", "תחום לימודים": r.field_of_study || "",
@@ -693,7 +697,7 @@ async function exportExcel() {
     });
 
     const fmtE = (r) => ({
-      "תאריך": r.timestamp ? new Date(r.timestamp).toLocaleString("he-IL") : "",
+      "תאריך": r.timestamp ? toIL(r.timestamp) : "",
       "טלגרם": r.telegram_username ? `@${r.telegram_username}` : String(r.telegram_id || ""),
       "מטעם": r.org_type || "",
       "שם ותפקיד": r.contact_name || "", "נייד": r.phone || "", "מייל": r.email || "",
@@ -730,7 +734,7 @@ async function exportExcel() {
     // גיליון בקשות גישה
     const ACCESS_HEADERS = ["תאריך", "שם", "נייד", "תחום", "מחפש", "שמע עלינו", "סטטוס"];
     const fmtA = (r) => ({
-      "תאריך": r.timestamp ? new Date(r.timestamp).toLocaleString("he-IL") : "",
+      "תאריך": r.timestamp ? toIL(r.timestamp) : "",
       "שם": r.full_name || "",
       "נייד": r.phone || "",
       "תחום": r.role || "",
@@ -745,7 +749,7 @@ async function exportExcel() {
     const fmtM = (m) => {
       const cand = candidates.find((c) => c.telegram_id === m.candidate_id);
       return {
-        "תאריך": m.matched_at ? new Date(m.matched_at).toLocaleString("he-IL") : "",
+        "תאריך": m.matched_at ? toIL(m.matched_at) : "",
         "שם מועמד": m.candidate_name || "",
         "שם לשכה/גוף": m.employer_name || "",
         "תחומים": cand?.interests || "",
@@ -761,7 +765,7 @@ async function exportExcel() {
       const emp  = employers.find((e) => e.telegram_id === r.employer_id);
       const rating = ratings.find((rt) => rt.employer_id === r.employer_id && rt.candidate_id === r.candidate_id);
       return {
-        "תאריך חיבור": r.updated_at ? new Date(r.updated_at).toLocaleString("he-IL") : "",
+        "תאריך חיבור": r.updated_at ? toIL(r.updated_at) : "",
         "שם יועץ":  cand?.full_name   || `ID:${r.candidate_id}`,
         "שם מגייס": emp?.contact_name || `ID:${r.employer_id}`,
         "גוף":      emp?.org_type     || "",
@@ -1382,7 +1386,7 @@ bot.on("message", async (msg) => {
         }
         const blocks = Object.values(grouped).map((g) => {
           const candLines = g.candidates.map((c) => {
-            const date = c.date ? new Date(c.date).toLocaleDateString("he-IL") : "—";
+            const date = c.date ? toILDate(c.date) : "—";
             return `   👤 ${c.name || "—"} — נשלח ${date}`;
           }).join("\n");
           return `🏛 ${g.contact_name || "—"} (${g.org_type || "—"})\n${candLines}`;
@@ -1405,7 +1409,7 @@ bot.on("message", async (msg) => {
       } else {
         const statusLabel = (s) => s === "connected" ? "חיבור מוצלח ✅" : s === "rejected" ? "לא מתאים ❌" : s === "in_progress" ? "בתהליך ⏳" : "פתוח";
         const lines = res.rows.map((r, i) => {
-          const date = r.requested_at ? new Date(r.requested_at).toLocaleDateString("he-IL") : "—";
+          const date = r.requested_at ? toILDate(r.requested_at) : "—";
           return `${i + 1}. ${r.contact_name || "—"} → ${r.candidate_name || "—"} | ${statusLabel(r.status)} | ${date}`;
         }).join("\n");
         await bot.sendMessage(chatId, `📞 יצירות קשר (${res.rows.length}):\n\n${lines}`);
@@ -1425,7 +1429,7 @@ bot.on("message", async (msg) => {
         await bot.sendMessage(chatId, "אין חיבורים מוצלחים כרגע.");
       } else {
         const lines = res.rows.map((r, i) => {
-          const date = r.updated_at ? new Date(r.updated_at).toLocaleDateString("he-IL") : "—";
+          const date = r.updated_at ? toILDate(r.updated_at) : "—";
           return `${i + 1}. ${r.contact_name || "—"} (${r.org_type || "—"}) → ${r.candidate_name || "—"} | ${date}`;
         }).join("\n");
         await bot.sendMessage(chatId, `🔗 חיבורים מוצלחים (${res.rows.length}):\n\n${lines}`);
@@ -2384,7 +2388,7 @@ async function sendDailyBackup() {
     matches:        matchesRes.rows,
     access_requests: accessRes.rows,
   };
-  const dateStr = new Date().toLocaleDateString("he-IL");
+  const dateStr = toILDate(new Date());
   const outPath = path.join(__dirname, "../backup.json");
   const { writeFileSync } = await import("fs");
   writeFileSync(outPath, JSON.stringify(backup, null, 2), "utf8");
