@@ -1121,7 +1121,9 @@ bot.onText(/\/start/, async (msg) => {
   const startPayload = msg.text?.split(" ")[1];
   if (startPayload?.startsWith("REC_")) {
     const candidateId = Number(startPayload.replace("REC_", ""));
+    console.log('REC lookup candidateId:', candidateId, typeof candidateId);
     const candidate = candidateId ? await getCandidateRecord(candidateId) : null;
+    console.log('REC candidate found:', candidate?.full_name, candidate?.is_intern);
     if (!candidate || candidate.is_intern !== "כן ✅") {
       await bot.sendMessage(chatId, "הלינק לא תקין 🙏");
       return;
