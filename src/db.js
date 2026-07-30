@@ -131,12 +131,15 @@ export async function initDB() {
   await query(`
     CREATE TABLE IF NOT EXISTS recommendations (
       id SERIAL PRIMARY KEY,
-      candidate_id BIGINT UNIQUE,
+      candidate_id BIGINT,
       text TEXT,
       recommender_name TEXT,
       created_at TIMESTAMPTZ DEFAULT NOW()
     )
   `);
+
+  // מיגרציה — הסרת מגבלת UNIQUE כדי לאפשר מספר המלצות לאותו מועמד
+  await query(`ALTER TABLE recommendations DROP CONSTRAINT IF EXISTS recommendations_candidate_id_key`);
 
   await query(`
     CREATE TABLE IF NOT EXISTS access_requests (

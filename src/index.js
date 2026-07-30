@@ -54,7 +54,8 @@ async function archiveCandidate(telegramId) {
 
 // ── פרופיל מועמד ─────────────────────────────────────────────────────────────
 
-function buildProfileMessage(cand) {
+async function buildProfileMessage(cand) {
+  const recs = await getRecommendations(cand.telegram_id);
   const lines = [
     "הפרופיל שלך 📋",
     "",
@@ -74,6 +75,11 @@ function buildProfileMessage(cand) {
     `היקף: ${cand.availability || ""}`,
     `צד פוליטי: ${cand.political_side || ""}`,
     `סטטוס: ${cand.status === "active" ? "פעיל ✅" : cand.status}`,
+    ...(recs.length > 0 ? [
+      "",
+      "⭐ המלצות:",
+      ...recs.map(r => `"${r.text}" — ${r.recommender_name || ""}`),
+    ] : []),
     "",
     "לעדכון פרטים — כתוב עדכן פרטים",
   ];
@@ -82,19 +88,18 @@ function buildProfileMessage(cand) {
 
 // ── המלצות ───────────────────────────────────────────────────────────────────
 
-async function getRecommendation(candidateId) {
+async function getRecommendations(candidateId) {
   const res = await query(
-    `SELECT * FROM recommendations WHERE candidate_id=$1`,
+    `SELECT * FROM recommendations WHERE candidate_id=$1 ORDER BY created_at ASC`,
     [candidateId]
   );
-  return res.rows[0] || null;
+  return res.rows;
 }
 
 async function saveRecommendationText(candidateId, text, recommenderName) {
   await query(
     `INSERT INTO recommendations (candidate_id, text, recommender_name)
-     VALUES ($1, $2, $3)
-     ON CONFLICT (candidate_id) DO UPDATE SET text=$2, recommender_name=$3`,
+     VALUES ($1, $2, $3)`,
     [candidateId, text, recommenderName]
   );
 }
@@ -1021,18 +1026,17 @@ async function finishSession(chatId, session) {
       }
     }
 
-    // שלח לאדמין טקסט מוכן לשליחה לדובר (אם יש)
+    // שלח לאדמין לינק לבקשת המלצה מהדובר/ת (אם יש)
     if (session.data.internship_mentor) {
+      const recLink = `https://t.me/kozo_ai_bot?start=REC_${chatId}`;
       const mentorMsg =
-        `📋 *בקשת המלצה*\n\n` +
-        `המועמד ${session.data.full_name} ציין שהתמחה אצל:\n` +
-        `👤 ${session.data.internship_mentor}\n\n` +
-        `*טקסט מוכן לשליחה בוואטסאפ:*\n` +
-        `שלום, אני קוזו.\n` +
-        `${session.data.full_name} שהתמחה אצלך ציין אותך בפרופיל שלו/ה.\n` +
-        `אם תרצה/י להמליץ עליו/ה, פתח/י את הבוט כאן:\n` +
-        `t.me/academiaB_advisor_bot`;
-      await bot.sendMessage(ADMIN_ID, mentorMsg, { parse_mode: "Markdown" });
+        `📋 בקשת המלצה\n\n` +
+        `${session.data.full_name} ציין/ה שהתמחה/ה אצל:\n` +
+        `👤 ${session.data.internship_mentor}\n` +
+        `📱 ${session.data.internship_phone || "לא צוין"}\n\n` +
+        `לינק לשליחה למנהל/ת (וואטסאפ/טלגרם):\n` +
+        `${recLink}`;
+      await bot.sendMessage(ADMIN_ID, mentorMsg);
     }
 
     // חפש לשכות קיימות שמתאימות — חיבור אוטומטי
@@ -1064,7 +1068,7 @@ async function finishSession(chatId, session) {
     // פרופיל מלא
     const savedCand = await getCandidateRecord(chatId);
     if (savedCand) {
-      await bot.sendMessage(chatId, buildProfileMessage(savedCand), {
+      await bot.sendMessage(chatId, await buildProfileMessage(savedCand), {
         reply_markup: { inline_keyboard: [[{ text: "✏️ עדכן פרטים", callback_data: "UPDATE_PROFILE" }]] },
       });
     }
@@ -1112,6 +1116,34 @@ async function finishSession(chatId, session) {
 
 bot.onText(/\/start/, async (msg) => {
   const chatId = msg.chat.id;
+
+  // טיפול בלינק המלצה: /start REC_<candidateId>
+  const startPayload = msg.text?.split(" ")[1];
+  if (startPayload?.startsWith("REC_")) {
+    const candidateId = Number(startPayload.replace("REC_", ""));
+    const candidate = candidateId ? await getCandidateRecord(candidateId) : null;
+    if (!candidate || candidate.is_intern !== "כן ✅") {
+      await bot.sendMessage(chatId, "הלינק לא תקין 🙏");
+      return;
+    }
+    const mentorName = candidate.internship_mentor || "";
+    await bot.sendMessage(
+      chatId,
+      `היי${mentorName ? ` ${mentorName}` : ""} 👋\n` +
+      `${candidate.full_name} נרשם/ה ל-KOZO וציין/ה שהתמחה/ה אצלך בכנסת.\n\n` +
+      `האם תרצה/י לכתוב המלצה קצרה שתופיע בפרופיל שלו/ה ותסייע לו/ה למצוא את התפקיד הבא?`,
+      {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "כן, אשמח להמליץ ✅", callback_data: `REC_YES_${candidateId}` }],
+            [{ text: "לא כרגע",            callback_data: `REC_NO_${candidateId}` }],
+          ],
+        },
+      }
+    );
+    return;
+  }
+
   chatHistories[chatId] = [];
 
   const existingCandidate = await getCandidateRecord(chatId);
@@ -1179,7 +1211,7 @@ bot.onText(/\/profile/, async (msg) => {
   const chatId = msg.chat.id;
   const cand = await getCandidateRecord(chatId);
   if (cand) {
-    await bot.sendMessage(chatId, buildProfileMessage(cand), {
+    await bot.sendMessage(chatId, await buildProfileMessage(cand), {
       reply_markup: { inline_keyboard: [[{ text: "✏️ עדכן פרטים", callback_data: "UPDATE_PROFILE" }]] },
     });
   } else {
@@ -1558,7 +1590,7 @@ bot.on("message", async (msg) => {
     if (lower.includes("הפרופיל שלי")) {
       const cand = await getCandidateRecord(chatId);
       if (cand) {
-        await bot.sendMessage(chatId, buildProfileMessage(cand), {
+        await bot.sendMessage(chatId, await buildProfileMessage(cand), {
           reply_markup: { inline_keyboard: [[{ text: "✏️ עדכן פרטים", callback_data: "UPDATE_PROFILE" }]] },
         });
       } else {
@@ -1638,9 +1670,14 @@ bot.on("message", async (msg) => {
   // ── כתיבת המלצה ──
   if (session && session.stage === "writing_recommendation") {
     const rec = text;
-    await saveRecommendationText(session.candidateId, rec, "ממליץ");
-    await bot.sendMessage(chatId, "תודה רבה! 🙏\nשמרתי את ההמלצה. היא תצורף לפרופיל ותגיע למקום הנכון 🤝");
-    await bot.sendMessage(ADMIN_ID, `⭐ התקבלה המלצה על מועמד ID: ${session.candidateId}\n\n"${rec}"`);
+    const recommenderName = session.recommenderName || "ממליץ";
+    await saveRecommendationText(session.candidateId, rec, recommenderName);
+    const recCandidate = await getCandidateRecord(session.candidateId);
+    await bot.sendMessage(chatId, "תודה רבה! 🙏\nשמרתי את ההמלצה. היא תופיע בפרופיל ותגיע למקום הנכון 🤝");
+    await bot.sendMessage(
+      ADMIN_ID,
+      `⭐ התקבלה המלצה\n\n👤 על: ${recCandidate?.full_name || `ID:${session.candidateId}`}\n✍️ מאת: ${recommenderName}\n\n"${rec}"`
+    );
     delete sessions[chatId];
     return;
   }
@@ -1789,6 +1826,10 @@ bot.on("callback_query", async (cbQuery) => {
     const referencesLine = candidate.has_references === "כן ✅" && candidate.references
       ? `\n⭐ ממליצים: ${candidate.references}`
       : "";
+    const candidateRecs = await getRecommendations(candidateId);
+    const recsLine = candidateRecs.length > 0
+      ? `\n\n💬 המלצות:\n` + candidateRecs.map(r => `"${r.text}" — ${r.recommender_name || ""}`).join("\n")
+      : "";
     const degreeText = candidate.degree && candidate.degree !== "אין תואר"
       ? `${candidate.degree} — ${candidate.field_of_study || ""}`
       : (candidate.certificate_field ? `תעודה: ${candidate.certificate_field}` : "אין תואר");
@@ -1802,7 +1843,8 @@ bot.on("callback_query", async (cbQuery) => {
       `🔍 תחומים: ${candidate.interests || ""}\n` +
       `📅 זמין: ${candidate.timing || ""} | ${candidate.availability || ""}` +
       internshipLine +
-      referencesLine;
+      referencesLine +
+      recsLine;
     await bot.sendMessage(chatId, card);
     const cvCaption = `קורות חיים — ${candidate.full_name || "מועמד"}`;
     if (candidate.cv.startsWith("file_id:")) {
@@ -1872,7 +1914,7 @@ bot.on("callback_query", async (cbQuery) => {
   if (data === "EXISTING_PROFILE") {
     const cand = await getCandidateRecord(chatId);
     if (cand) {
-      await bot.sendMessage(chatId, buildProfileMessage(cand), {
+      await bot.sendMessage(chatId, await buildProfileMessage(cand), {
         reply_markup: { inline_keyboard: [[{ text: "✏️ עדכן פרטים", callback_data: "EXISTING_UPDATE" }]] },
       });
     } else {
@@ -2113,8 +2155,10 @@ bot.on("callback_query", async (cbQuery) => {
   // המלצה — כן
   if (data.startsWith("REC_YES_")) {
     const candidateId = Number(data.split("_")[2]);
-    sessions[chatId] = { stage: "writing_recommendation", candidateId };
-    await bot.sendMessage(chatId, "כתוב/י בחופשיות. ממליצים טובים עושים את ההבדל:");
+    const recCandidate = await getCandidateRecord(candidateId);
+    const recommenderName = recCandidate?.internship_mentor || "ממליץ";
+    sessions[chatId] = { stage: "writing_recommendation", candidateId, recommenderName };
+    await bot.sendMessage(chatId, "כתוב/י בחופשיות. ממליצים טובים עושים את ההבדל 🙏");
     return;
   }
 
