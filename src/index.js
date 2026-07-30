@@ -1513,18 +1513,6 @@ bot.on("message", async (msg) => {
 
   const session = sessions[chatId];
 
-  // ── קוד אישור לשכה/עירייה — נבדק לפני כל handler אחר ──
-  if (session && session.stage === "awaiting_employer_code") {
-    if (text.toLowerCase() === EMPLOYER_ACCESS_CODE.toLowerCase()) {
-      sessions[chatId] = { ...newSession("employer", session.username), data: {} };
-      await bot.sendMessage(chatId, "קוד אומת ✅\n\nהיי, אני קוזו 🤝\nבואו נכניס אתכם למאגר ונתחיל לחבר:");
-      await sendStep(chatId, sessions[chatId]);
-    } else {
-      await bot.sendMessage(chatId, "הקוד לא מוכר לי 🙏 לקבלת קוד תקין, פנו אלינו ישירות.\nלפניה ישירה: wa.me/972548028082");
-    }
-    return;
-  }
-
   // ── מצב השהייה ──
   if (!session || session.stage === "free_chat") {
     // בדיקת מילות מפתח לפני Claude
@@ -2205,25 +2193,13 @@ bot.on("callback_query", async (cbQuery) => {
       sessions[chatId] = { stage: "awaiting_phone", username: session.username, pendingType: "candidate" };
       await bot.sendMessage(chatId, "שלח לי את הנייד שלך ונתחיל:");
     } else if (data === "EMPLOYER") {
-      // לשכה/עירייה — דורשת קוד אישור לפני שמתחילים
-      sessions[chatId] = { stage: "awaiting_employer_code", username: session.username };
-      await bot.sendMessage(
-        chatId,
-        "כדי שנוכל לחבר אתכם לנכונים, נצטרך קוד אישור קצר.\n\n📞 לקבלת הקוד:",
-        {
-          reply_markup: {
-            inline_keyboard: [[
-              { text: "💬 צור קשר לקבלת קוד", url: ADMIN_PHONE_LINK },
-            ]],
-          },
-        }
-      );
-      await bot.sendMessage(chatId, "יש לכם קוד? שלחו אותו כאן:");
+      sessions[chatId] = { ...newSession("employer", session.username), data: {} };
+      await bot.sendMessage(chatId, "היי, אני קוזו 🤝\nבואו נכניס אתכם למאגר ונתחיל לחבר:");
+      await sendStep(chatId, sessions[chatId]);
     }
     return;
   }
 
-  if (session.stage === "awaiting_employer_code") return;
 
   if (!session.verified && session.stage !== "updating") return;
 
