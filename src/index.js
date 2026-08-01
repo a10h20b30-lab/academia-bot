@@ -495,7 +495,7 @@ async function runTask(task) {
 async function checkScheduledTasks() {
   try {
     const res = await query(
-      `SELECT * FROM scheduled_tasks WHERE done=false AND scheduled_for <= NOW()`
+      `SELECT * FROM scheduled_tasks WHERE done=false AND scheduled_for <= NOW() ORDER BY scheduled_for ASC LIMIT 10`
     );
     for (const task of res.rows) {
       try {
