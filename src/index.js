@@ -2327,13 +2327,15 @@ async function sendMonthlyReport() {
   );
 }
 
+// בודק כל יום בשעה 9 — מונע overflow של setTimeout עם עיכוב של מעל 24.8 יום
 function scheduleMonthlyReport() {
-  const now  = new Date();
-  const next = new Date(now.getFullYear(), now.getMonth() + 1, 1, 9, 0, 0, 0);
-  setTimeout(async () => {
-    try { await sendMonthlyReport(); } catch (e) { console.error("monthly report error:", e.message); }
-    scheduleMonthlyReport();
-  }, next - now);
+  const ONE_DAY = 24 * 60 * 60 * 1000;
+  setInterval(async () => {
+    const now = new Date();
+    if (now.getDate() === 1 && now.getHours() === 9) {
+      try { await sendMonthlyReport(); } catch (e) { console.error("monthly report error:", e.message); }
+    }
+  }, ONE_DAY);
 }
 
 async function sendWeeklySummary() {
