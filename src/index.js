@@ -1368,25 +1368,21 @@ bot.on("message", async (msg) => {
          ORDER BY cr.updated_at DESC LIMIT 1`,
         [targetEmployerId]
       );
-      if (cvRes.rows.length === 0) {
-        await bot.sendMessage(chatId, "לא נמצאה בקשת קורות חיים פתוחה למגייס הזה.");
-        return;
-      }
-      const { candidate_id, full_name } = cvRes.rows[0];
+      const candidateName = cvRes.rows[0]?.full_name || "ישראל ישראלי";
+      const candidateId   = cvRes.rows[0]?.candidate_id || 0;
       await bot.sendMessage(
-        targetEmployerId,
-        `היי, ראית את הפרטים של ${full_name} לפני שבוע. מה קרה מאז? 👋`,
+        chatId,
+        `היי, ראית את הפרטים של ${candidateName} לפני שבוע. מה קרה מאז? 👋`,
         {
           reply_markup: {
             inline_keyboard: [[
-              { text: "✅ יצרנו קשר", callback_data: `CVFOLLOWUP_CONTACTED_${candidate_id}_${targetEmployerId}` },
-              { text: "⏳ בתהליך",    callback_data: `CVFOLLOWUP_INPROGRESS_${candidate_id}_${targetEmployerId}` },
-              { text: "❌ לא מתאים", callback_data: `CVFOLLOWUP_NOTSUITABLE_${candidate_id}_${targetEmployerId}` },
+              { text: "✅ יצרנו קשר", callback_data: `CVFOLLOWUP_CONTACTED_${candidateId}_${targetEmployerId}` },
+              { text: "⏳ בתהליך",    callback_data: `CVFOLLOWUP_INPROGRESS_${candidateId}_${targetEmployerId}` },
+              { text: "❌ לא מתאים", callback_data: `CVFOLLOWUP_NOTSUITABLE_${candidateId}_${targetEmployerId}` },
             ]],
           },
         }
       );
-      await bot.sendMessage(chatId, `✅ הודעת מעקב נשלחה למגייס ${targetEmployerId} על ${full_name}`);
       return;
     }
     if (text === "טבלה") { await sendExcel(); return; }
