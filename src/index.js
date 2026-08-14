@@ -397,13 +397,13 @@ async function runTask(task) {
       if (!req || req.status === "connected" || req.status === "rejected") break;
       await bot.sendMessage(
         employerId,
-        `מה קרה עם ${candidateName}?`,
+        `היי, ראית את הפרטים של ${candidateName} לפני שבוע. מה קרה מאז? 👋`,
         {
           reply_markup: {
             inline_keyboard: [[
-              { text: "✅ יצרתי קשר",  callback_data: `CVFOLLOWUP_CONTACTED_${task.target_id}_${employerId}` },
-              { text: "⏳ עוד בתהליך", callback_data: `CVFOLLOWUP_INPROGRESS_${task.target_id}_${employerId}` },
-              { text: "❌ לא מתאים",   callback_data: `CVFOLLOWUP_NOTSUITABLE_${task.target_id}_${employerId}` },
+              { text: "✅ יצרנו קשר", callback_data: `CVFOLLOWUP_CONTACTED_${task.target_id}_${employerId}` },
+              { text: "⏳ בתהליך",    callback_data: `CVFOLLOWUP_INPROGRESS_${task.target_id}_${employerId}` },
+              { text: "❌ לא מתאים", callback_data: `CVFOLLOWUP_NOTSUITABLE_${task.target_id}_${employerId}` },
             ]],
           },
         }
