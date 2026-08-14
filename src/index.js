@@ -1354,6 +1354,41 @@ bot.on("message", async (msg) => {
       await bot.sendMessage(chatId, msg);
       return;
     }
+    if (text.startsWith("טסט מעקב ")) {
+      const targetEmployerId = Number(text.replace("טסט מעקב ", "").trim());
+      if (!targetEmployerId) {
+        await bot.sendMessage(chatId, "פורמט: טסט מעקב [ID של מגייס]");
+        return;
+      }
+      const cvRes = await query(
+        `SELECT cr.candidate_id, c.full_name
+         FROM cv_requests cr
+         JOIN candidates c ON c.telegram_id = cr.candidate_id
+         WHERE cr.employer_id=$1 AND cr.status NOT IN ('connected','rejected')
+         ORDER BY cr.updated_at DESC LIMIT 1`,
+        [targetEmployerId]
+      );
+      if (cvRes.rows.length === 0) {
+        await bot.sendMessage(chatId, "לא נמצאה בקשת קורות חיים פתוחה למגייס הזה.");
+        return;
+      }
+      const { candidate_id, full_name } = cvRes.rows[0];
+      await bot.sendMessage(
+        targetEmployerId,
+        `היי, ראית את הפרטים של ${full_name} לפני שבוע. מה קרה מאז? 👋`,
+        {
+          reply_markup: {
+            inline_keyboard: [[
+              { text: "✅ יצרנו קשר", callback_data: `CVFOLLOWUP_CONTACTED_${candidate_id}_${targetEmployerId}` },
+              { text: "⏳ בתהליך",    callback_data: `CVFOLLOWUP_INPROGRESS_${candidate_id}_${targetEmployerId}` },
+              { text: "❌ לא מתאים", callback_data: `CVFOLLOWUP_NOTSUITABLE_${candidate_id}_${targetEmployerId}` },
+            ]],
+          },
+        }
+      );
+      await bot.sendMessage(chatId, `✅ הודעת מעקב נשלחה למגייס ${targetEmployerId} על ${full_name}`);
+      return;
+    }
     if (text === "טבלה") { await sendExcel(); return; }
     if (text === "סטטוס") { await sendStatus(); return; }
     if (text === "קוזו במספרים") {
